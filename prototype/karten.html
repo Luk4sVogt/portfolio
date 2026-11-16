@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio – Karten-Prototyp</title>
+<style>
+  /* ---------- Einstellungen zum Herumspielen ---------- */
+  :root {
+    --card-w: clamp(150px, 22vw, 300px);    /* Karten sind quadratisch */
+    --card-h: var(--card-w);
+    --dx: calc(var(--card-w) * 0.21);       /* Seitenversatz pro hinterer Karte */
+    --dy: calc(var(--card-w) * 0.11);       /* Höhenversatz; den Rest macht die Perspektive */
+    --dz: 140px;                          /* Tiefe pro Karte: hintere Karten rücken wirklich nach hinten */
+    --rx: 0deg;                             /* kein Kippen nach hinten/vorne mehr */
+    --ry: 20deg;                            /* Vorderseite zeigt nach rechts (linke Kante vorn, rechte hinten) */
+    --ry-open: 0deg;                        /* so viel dreht die Karte beim Ausfahren zurück (0 = Winkel bleibt) */
+    --lift-max: calc(var(--card-h) * 0.46); /* wie hoch die Karte aus dem Stapel fährt */
+    --open-extra: 1.1;                      /* wie viel breiter die Karte wird (x Kartenbreite) */
+    --ink: #1b1f27;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+
+  body {
+    min-height: 100vh;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: #f4f2ee;
+    overflow: hidden;
+  }
+
+  /* Hintergrund: heller Grund, Akzentfarben als weiche Farbwolken.
+     Das Skript setzt die Farben jeden Frame, daher gleiten sie sanft ineinander. */
+  .bg {
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(55% 55% at 62% 48%, var(--theme-a, #cdd9f2) 0%, transparent 72%),
+      radial-gradient(50% 50% at 24% 70%, var(--theme-b, #e3dcef) 0%, transparent 72%),
+      #f1efeb;
+  }
+
+  /* ---------- Taskbar (schwebende Pille) ---------- */
+  .nav {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 120;
+    transition: opacity .7s ease .3s, filter .7s ease .3s;
+    display: flex; align-items: center; gap: 26px;
+    padding: 8px 8px 8px 16px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.72);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid rgba(255,255,255,.95);
+    box-shadow: 0 6px 24px rgba(60, 50, 40, .08);
+    font-size: 13.5px; white-space: nowrap;
+  }
+  .nav .brand { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .nav .dot { width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(135deg, #f6b273, #e8808f); }
+  .nav .links { display: flex; gap: 22px; opacity: .72; }
+  .nav a { color: inherit; text-decoration: none; transition: opacity .25s ease; }
+  .nav .links a:hover { opacity: .6; }
+  .nav .cta {
+    padding: 9px 16px; border-radius: 999px;
+    background: var(--ink); color: #fff; font-weight: 500; opacity: 1;
+  }
+
+  /* ---------- Bühne ---------- */
+  .stage {
+    position: relative; z-index: 2;
+    height: 100vh;
+    padding-top: 70px;
+    display: grid; place-items: center;
+  }
+  .stack {
+    position: relative;
+    /* Zurück aus dem Hero: Stapel wird erst nach kurzer Verzögerung wieder scharf (Karte ist dann schon unterwegs) */
+    transition: opacity .9s ease .2s, filter .9s ease .2s;
+    width: calc(var(--card-w) + var(--dx) * 3);               /* 4 Karten = 3 Abstände */
+    height: calc(var(--card-h) + var(--dy) * 3 + var(--lift-max));
+    margin-bottom: calc(var(--lift-max) * .45);                 /* schiebt den Stapel etwas nach oben (optisch mittiger) */
+  }
+
+  /* Zwei deckungsgleiche Ebenen mit gleicher Perspektive:
+     unten die sichtbaren Karten, oben unsichtbare Trefferflächen, die sich NIE bewegen.
+     So zielt man immer auf den sichtbaren Streifen einer Karte, egal wie hoch sie gerade ist. */
+  .layer {
+    position: absolute; inset: 0;
+    perspective: 1500px;
+    perspective-origin: 8% 8%;     /* Fluchtpunkt oben links: der Stapel läuft nach links hinten weg */
+  }
+  .layer.cards { z-index: 2; }
+  .layer.floor { z-index: 2; pointer-events: none; }   /* liegt (im DOM) nach den Karten, also optisch davor */
+  .layer.zones { z-index: 3; }
+
+  /* Jahreszahl: liegt flach auf einem (unsichtbaren) Boden vor dem Stapel, in der "Bahn" ihrer Karte.
+     rotateX(90deg) legt sie hin; ihr oberes Ende zeigt nach hinten zum Fluchtpunkt. */
+  .floor-num {
+    --num: 0;                                   /* 0..1, vom Skript gesetzt */
+    position: absolute;
+    left: calc(var(--i) * var(--dx) - var(--card-w) * .3);   /* Mitte = Mitte der Karte (Bahn) */
+    top: 100%;                                  /* beginnt an der Standlinie der vordersten Karte */
+    width: calc(var(--card-w) * 1.6);
+    height: calc(var(--card-w) * .5);
+    transform-origin: 50% 0;
+    /* scaleY streckt die Ziffern in Tiefenrichtung: von oben gesehen wird liegende Schrift sehr flach (Anamorphose) */
+    transform: translateZ(30px) rotateX(90deg) scaleY(2.6) translateY(calc((1 - var(--num)) * -14px));  /* gleitet beim Erscheinen nach vorn */
+    opacity: calc(var(--num) * .62);
+    color: var(--c);
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);   /* läuft zum Fluchtpunkt hin aus */
+            mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+  }
+  .floor-num span {
+    display: block; text-align: center; white-space: nowrap;
+    font-size: calc(var(--card-w) * .5); font-weight: 700; letter-spacing: -.04em; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slot, .zone {
+    --lift: 0;   /* 0..1, jeden Frame vom Skript gesetzt */
+    --open: 0;   /* 0..1, wie weit die Karte ausgefahren ist */
+    position: absolute;
+    left: calc(var(--i) * var(--dx));
+    bottom: calc(var(--k) * var(--dy));
+    width: var(--card-w);
+    height: var(--card-h);
+    z-index: var(--i);            /* bleibt immer gleich: vordere Karten verdecken hintere */
+    transform: translateZ(calc(var(--k) * var(--dz) * -1)) rotateX(var(--rx)) rotateY(calc(var(--ry) - var(--open) * var(--ry-open)));
+    transform-origin: 50% 100%;
+    text-decoration: none; color: inherit; outline: none;
+  }
+  .slot { pointer-events: none; }
+  .slot.hov .card { pointer-events: auto; }   /* nur die angewählte Karte darf "Reste" abfangen */
+  .zone { cursor: pointer; }
+
+  /* Die Karte: rechts verankert, wächst beim Öffnen nach links */
+  .card {
+    position: absolute; right: 0; bottom: 0;
+    height: var(--card-h);
+    width: calc(var(--card-w) * (1 + var(--open) * var(--open-extra)));
+    border-radius: 22px;
+    overflow: hidden;
+    transform: translateY(calc(var(--lift) * var(--lift-max) * -1));
+    box-shadow: 0 calc(10px + var(--lift) * 24px) calc(24px + var(--lift) * 34px) rgba(40, 50, 80, .18);
+    /* Glas: halbtransparent, Hintergrund wird weichgezeichnet */
+    background: linear-gradient(160deg, rgba(255,255,255,.55), rgba(255,255,255,.18));
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid rgba(255,255,255,.9);
+    will-change: transform, width;
+  }
+
+  /* Platzhalter-Bild: bleibt immer ein Quadrat rechts in der Karte */
+  .card .art {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: var(--card-w);
+    background: var(--art);
+    opacity: .95;
+    transform: scale(calc(1 + var(--open) * .05));
+  }
+
+  /* Kleines Label wie im Referenzbild – verschwindet beim Öffnen */
+  .label {
+    position: absolute; right: 14px; bottom: 14px;
+    padding: 9px 16px; border-radius: 999px;
+    background: rgba(255,255,255,.94); color: var(--ink);
+    font-size: 14px; font-weight: 500; white-space: nowrap;
+    opacity: calc(1 - var(--open) * 3);
+  }
+
+  /* Infobereich links: wird beim Ausfahren sichtbar, Inhalt blendet nacheinander ein */
+  .panel {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    width: calc(var(--card-w) * var(--open-extra) + 14px);
+    padding: 26px 22px;
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 10px;
+    background: rgba(255,255,255,.68);
+  }
+  .panel > * {
+    --p: clamp(0, calc((var(--open) - var(--t)) * 4), 1);
+    opacity: var(--p);
+    transform: translateY(calc((1 - var(--p)) * 14px));
+  }
+  .panel h3 { --t: .45; font-size: 21px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; }
+  .panel .role { --t: .55; font-size: 13px; line-height: 1.3; white-space: nowrap; opacity: calc(var(--p) * .72); }
+  .panel .desc { --t: .63; font-size: 12.5px; line-height: 1.45; opacity: calc(var(--p) * .85); }
+  .panel .tags { --t: .72; display: flex; flex-wrap: wrap; gap: 6px; }
+  .panel .kpi  { --t: .80; font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+  .panel .tags span {
+    font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+    background: rgba(27,31,39,.07); border: 1px solid rgba(27,31,39,.12);
+  }
+
+  .slot:focus-visible .card { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  /* Cursor-Label: klebt exakt am Mauszeiger (keine Verzögerung bei der Position) */
+  .cursor-label {
+    position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none;
+    padding: 8px 14px; border-radius: 999px;
+    background: var(--ink); color: #fff;
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    opacity: 0; transition: opacity .22s ease;
+    will-change: transform;
+  }
+  .cursor-label.show { opacity: 1; }
+  @media (hover: none) { .cursor-label { display: none; } }
+
+  /* ---------- Übergang Karte -> Hero ---------- */
+  /* Alles, was nicht zum Projekt gehört, wird langsam unscharf und blendet aus */
+  /* (Die Taskbar bleibt immer unverändert.) Kein scale auf dem Stapel: das würde die Messung der Kartenpositionen verfälschen. */
+  body.opening .stack {
+    opacity: 0; filter: blur(16px); pointer-events: none;
+    transition: opacity 1s ease, filter 1s ease;
+  }
+
+  /* Kopie der Karte, die beim Klick auf den Bildschirm wächst bzw. zurückschrumpft */
+  .card.morph {
+    position: fixed; right: auto; bottom: auto; z-index: 100;
+    transform: none; pointer-events: none;
+    will-change: left, top, width, height, transform;
+  }
+
+  /* Hero der Case Study (Vollbild) */
+  .hero {
+    --hp: clamp(24px, 6vw, 96px);
+    position: fixed; inset: 0; z-index: 90; display: none;
+    flex-direction: column; justify-content: flex-end; gap: 18px;
+    padding: 120px var(--hp) 11vh;
+    background: #f1efeb; opacity: 0;
+  }
+  .hero.on { display: flex; }
+  .hero-art  { position: absolute; inset: 0; background: var(--art); opacity: .8; }
+  .hero-veil { position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(255,255,255,.5), rgba(255,255,255,.08) 65%); }
+  .hero > *:not(.hero-art):not(.hero-veil) { position: relative; z-index: 1; }
+
+  .hero-back {
+    position: absolute !important; top: 86px; left: var(--hp);
+    padding: 9px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.95);
+    background: rgba(255,255,255,.72); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 500;
+    cursor: pointer; transition: background .25s ease;
+  }
+  .hero-back:hover { background: rgba(255,255,255,.95); }
+
+  /* Die Hero-Texte sind genau die vergrößerten Textzeilen der Karte (gleiche Reihenfolge, gleiche Stile),
+     damit sie beim Öffnen mitwachsen können statt neu zu erscheinen. */
+  .hero-title { font-size: clamp(44px, 8vw, 104px); font-weight: 600; letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; }
+  .hero-role  { font-size: clamp(15px, 1.5vw, 20px); line-height: 1.3; opacity: .72; white-space: nowrap; }
+  .hero-desc  { font-size: clamp(16px, 1.6vw, 22px); line-height: 1.45; max-width: 36ch; opacity: .85; }
+  .hero .tags { display: flex; flex-wrap: wrap; gap: 7.2px; }                 /* 1,2 x Kartenwerte (6px) */
+  .hero .tags span {
+    font-size: 13.8px; padding: 3.6px 12px; border-radius: 999px;             /* 1,2 x (11,5px / 3px 10px) */
+    background: rgba(27,31,39,.07); border: 1px solid rgba(27,31,39,.12);
+  }
+  .hero-kpi  { font-size: 15px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+  .hero-note { position: absolute !important; right: var(--hp); bottom: 26px; font-size: 12px; opacity: .5; }
+
+  /* Nur der Zurück-Button blendet ein */
+  .hero-back { opacity: 0; transition: opacity .45s ease, background .25s ease; }
+  .hero.ready .hero-back { opacity: 1; }
+
+  /* ---------- Handy ---------- */
+  @media (max-width: 700px) {
+    :root { --open-extra: 0.9; --ry: 16deg; --ry-open: 0deg; --dz: 110px; }
+    .nav { gap: 14px; }
+    .nav .links { display: none; }
+    .panel { padding: 16px 14px; }
+    .panel h3 { font-size: 16px; }
+    .panel .desc, .panel .kpi { display: none; }   /* auf kleinen Karten ist kein Platz für lange Texte */
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cursor-label { transition-duration: .01ms; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg" id="bg"></div>
+
+<nav class="nav" aria-label="Hauptnavigation">
+  <a class="brand" href="#"><span class="dot"></span>Dein Name</a>
+  <div class="links"><a href="#projekte">Projekte</a><a href="#ueber-mich">Über mich</a></div>
+  <a class="cta" href="#kontakt">Kontakt</a>
+</nav>
+<div class="cursor-label" id="cursorLabel">Case Study angucken</div>
+
+<!-- Vollbild-Hero der Case Study (wird per Skript befüllt) -->
+<section class="hero" id="hero" aria-label="Case Study">
+  <div class="hero-art"></div><div class="hero-veil"></div>
+  <button class="hero-back" id="heroBack" type="button">← Alle Projekte</button>
+  <h1 class="hero-title" id="heroTitle"></h1>
+  <p class="hero-role" id="heroRole"></p>
+  <p class="hero-desc" id="heroDesc"></p>
+  <div class="tags" id="heroTags"></div>
+  <p class="hero-kpi" id="heroKpi"></p>
+  <p class="hero-note">Platzhalter · hier beginnt später die Case Study</p>
+</section>
+
+<main class="stage">
+  <div class="stack" id="stack">
+    <div class="layer cards" id="cards">
+      <!-- --i = Position von links (0 = ganz hinten), --k = Tiefe von vorn (0 = ganz vorn).
+           data-a / data-b = Akzentfarben für den Hintergrund. Farben aus den Projekten:
+           Cookey = Violett, Masterarbeit = Grün/Teal, Bachelorarbeit = Industrieblau. -->
+      <a class="slot" href="#bachelorarbeit" style="--i:0;--k:3" data-a="#8fb2e0" data-b="#aeb8c7" data-c="#2f6fb5" data-year="2022">
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2216%22 stdDeviation=%2218%22 flood-color=%22%230a1a2e%22 flood-opacity=%22.4%22/%3E%3C/filter%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2240%22 y=%22110%22 width=%22520%22 height=%22340%22 rx=%2222%22 fill=%22%2327354a%22/%3E %3C/g%3E %3Crect x=%2240%22 y=%22110%22 width=%2264%22 height=%22340%22 rx=%2222%22 fill=%22%231d2a3c%22/%3E %3Cg fill=%22%238fb2e0%22 opacity=%22.9%22%3E %3Crect x=%2260%22 y=%22136%22 width=%2224%22 height=%2224%22 rx=%226%22/%3E%3Crect x=%2260%22 y=%22180%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3Crect x=%2260%22 y=%22224%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E%3Crect x=%2260%22 y=%22268%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3Crect x=%2260%22 y=%22400%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3C/g%3E %3Crect x=%22124%22 y=%22128%22 width=%22420%22 height=%2228%22 rx=%228%22 fill=%22%232f6fb5%22/%3E %3Crect x=%22138%22 y=%22138%22 width=%2290%22 height=%228%22 rx=%224%22 fill=%22%23fff%22 opacity=%22.8%22/%3E %3Crect x=%22124%22 y=%22172%22 width=%22290%22 height=%22250%22 rx=%2212%22 fill=%22%231d2a3c%22/%3E %3Cg stroke=%22%233a4a63%22 stroke-width=%221%22%3E %3Cline x1=%22140%22 y1=%22210%22 x2=%22400%22 y2=%22210%22/%3E%3Cline x1=%22140%22 y1=%22250%22 x2=%22400%22 y2=%22250%22/%3E %3Cline x1=%22140%22 y1=%22290%22 x2=%22400%22 y2=%22290%22/%3E%3Cline x1=%22140%22 y1=%22330%22 x2=%22400%22 y2=%22330%22/%3E%3Cline x1=%22140%22 y1=%22370%22 x2=%22400%22 y2=%22370%22/%3E %3C/g%3E %3Cline x1=%22140%22 y1=%22226%22 x2=%22400%22 y2=%22226%22 stroke=%22%23e5606a%22 stroke-width=%222%22 stroke-dasharray=%226 5%22/%3E %3Cline x1=%22140%22 y1=%22364%22 x2=%22400%22 y2=%22364%22 stroke=%22%23e5606a%22 stroke-width=%222%22 stroke-dasharray=%226 5%22/%3E %3Cpolyline fill=%22none%22 stroke=%22%23f4d35e%22 stroke-width=%223%22 stroke-linejoin=%22round%22 points=%22140,330 170,300 195,312 220,262 245,280 270,250 295,300 320,272 345,310 372,262 400,290%22/%3E %3Cpolyline fill=%22none%22 stroke=%22%236fb1ff%22 stroke-width=%222.5%22 stroke-linejoin=%22round%22 opacity=%22.85%22 points=%22140,350 175,340 205,346 240,322 270,336 300,330 335,344 370,326 400,334%22/%3E %3Crect x=%22430%22 y=%22172%22 width=%22114%22 height=%22250%22 rx=%2212%22 fill=%22%231d2a3c%22/%3E %3Cg fill=%22%238fb2e0%22 opacity=%22.85%22%3E %3Crect x=%22444%22 y=%22190%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22208%22 width=%2246%22 height=%2214%22 rx=%225%22 fill=%22%23f4d35e%22/%3E %3Crect x=%22444%22 y=%22244%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22262%22 width=%2256%22 height=%2214%22 rx=%225%22 fill=%22%236fb1ff%22/%3E %3Crect x=%22444%22 y=%22298%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22316%22 width=%2238%22 height=%2214%22 rx=%225%22/%3E %3C/g%3E %3Ccircle cx=%22470%22 cy=%22382%22 r=%2213%22 fill=%22%233fae82%22/%3E%3Ccircle cx=%22508%22 cy=%22382%22 r=%2213%22 fill=%22%233a4a63%22/%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%22260%22 y=%22400%22 width=%22300%22 height=%22150%22 rx=%2218%22 fill=%22%2327354a%22/%3E %3C/g%3E %3Cg%3E %3Crect x=%22276%22 y=%22418%22 width=%22268%22 height=%2216%22 rx=%226%22 fill=%22%232f6fb5%22/%3E %3Crect x=%22276%22 y=%22446%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22446%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E %3Crect x=%22276%22 y=%22470%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22470%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%238fb2e0%22 opacity=%22.7%22/%3E %3Crect x=%22276%22 y=%22494%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22494%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E %3C/g%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 25%, #d5e4f8, transparent 70%), linear-gradient(160deg,#2f6fb5,#2c3d52)"></div>
+          <span class="label">Bachelorarbeit</span>
+          <div class="panel"><h3>Bachelorarbeit</h3><p class="role">Star Micronics · UI-Entwicklung</p>
+            <p class="desc">Echtzeit-Überwachung von Werkzeugen in der Fertigung, vom Mockup bis zur Anwendung.</p>
+            <div class="tags"><span>Qt Creator</span><span>C++</span><span>Mockups</span></div></div></div>
+      </a>
+      <a class="slot" href="#masterarbeit" style="--i:1;--k:2" data-a="#8fd4b0" data-b="#b9a8e6" data-c="#2f9e86" data-year="2024">
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3Cfilter id=%22blur%22 x=%22-10%%22 y=%22-10%%22 width=%22120%%22 height=%22120%%22%3E%3CfeGaussianBlur stdDeviation=%227%22/%3E%3C/filter%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2214%22 stdDeviation=%2216%22 flood-color=%22%230d3b3a%22 flood-opacity=%22.3%22/%3E%3C/filter%3E %3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%237fe0b4%22/%3E%3Cstop offset=%221%22 stop-color=%22%232f9e86%22/%3E%3C/linearGradient%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2250%22 y=%22130%22 width=%22360%22 height=%22280%22 rx=%2226%22 fill=%22%23f6fffb%22/%3E %3C/g%3E %3Cg filter=%22url(%23blur)%22%3E %3Crect x=%2270%22 y=%22150%22 width=%22320%22 height=%2240%22 rx=%2214%22 fill=%22%23cdeee0%22/%3E %3Crect x=%2270%22 y=%22204%22 width=%22150%22 height=%22190%22 rx=%2218%22 fill=%22url(%23g)%22/%3E %3Crect x=%22232%22 y=%22204%22 width=%22158%22 height=%2286%22 rx=%2218%22 fill=%22%23bfe9dc%22/%3E %3Crect x=%22232%22 y=%22304%22 width=%22158%22 height=%2290%22 rx=%2218%22 fill=%22%238d79e0%22 opacity=%22.85%22/%3E %3Ccircle cx=%22145%22 cy=%22300%22 r=%2242%22 fill=%22%23fff%22 opacity=%22.6%22/%3E %3C/g%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%22340%22 y=%22200%22 width=%22200%22 height=%22370%22 rx=%2232%22 fill=%22%23f6fffb%22/%3E %3C/g%3E %3Cg filter=%22url(%23blur)%22%3E %3Crect x=%22358%22 y=%22222%22 width=%22164%22 height=%2234%22 rx=%2212%22 fill=%22%23cdeee0%22/%3E %3Crect x=%22358%22 y=%22270%22 width=%22164%22 height=%22120%22 rx=%2220%22 fill=%22url(%23g)%22/%3E %3Crect x=%22358%22 y=%22404%22 width=%2276%22 height=%2270%22 rx=%2216%22 fill=%22%238d79e0%22 opacity=%22.85%22/%3E %3Crect x=%22446%22 y=%22404%22 width=%2276%22 height=%2270%22 rx=%2216%22 fill=%22%23bfe9dc%22/%3E %3Crect x=%22358%22 y=%22488%22 width=%22164%22 height=%2250%22 rx=%2216%22 fill=%22%23cdeee0%22/%3E %3C/g%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 65% 30%, #d6f7e8, transparent 70%), linear-gradient(160deg,#3fae82,#1d6f66)"></div>
+          <span class="label">Masterarbeit</span>
+          <div class="panel"><h3>Masterarbeit</h3><p class="role">B. Braun Aesculap · Medizintechnik</p>
+            <p class="desc">Benutzeroberflächen für eine Ölspraystation und eine Service-App im Medizintechnik-Umfeld.</p>
+            <div class="tags"><span>Human-Centered Design</span><span>Wizard of Oz</span></div>
+            <p class="kpi">SUS-Score 81,5</p></div></div>
+      </a>
+      <a class="slot" href="#cookey" style="--i:2;--k:1" data-a="#b9a8f2" data-b="#f2b892" data-c="#7b61e8" data-year="2025">
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22food%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffb26b%22/%3E%3Cstop offset=%221%22 stop-color=%22%23ff6b4a%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22food2%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%239be3b0%22/%3E%3Cstop offset=%221%22 stop-color=%22%233fae82%22/%3E%3C/linearGradient%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2214%22 stdDeviation=%2216%22 flood-color=%22%232a1a6e%22 flood-opacity=%22.28%22/%3E%3C/filter%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2270%22 y=%2270%22 width=%22210%22 height=%22440%22 rx=%2234%22 fill=%22%23fbfaff%22/%3E %3Crect x=%2286%22 y=%2292%22 width=%2290%22 height=%2212%22 rx=%226%22 fill=%22%232a1f5c%22 opacity=%22.85%22/%3E %3Crect x=%2286%22 y=%22112%22 width=%22130%22 height=%228%22 rx=%224%22 fill=%22%237b61e8%22 opacity=%22.45%22/%3E %3Crect x=%2286%22 y=%22140%22 width=%22178%22 height=%22150%22 rx=%2222%22 fill=%22url(%23food)%22/%3E %3Ccircle cx=%22175%22 cy=%22215%22 r=%2252%22 fill=%22%23fff%22 opacity=%22.35%22/%3E%3Ccircle cx=%22175%22 cy=%22215%22 r=%2234%22 fill=%22%23fff%22 opacity=%22.55%22/%3E %3Crect x=%2286%22 y=%22306%22 width=%2260%22 height=%2220%22 rx=%2210%22 fill=%22%23e9e3ff%22/%3E%3Crect x=%22154%22 y=%22306%22 width=%2260%22 height=%2220%22 rx=%2210%22 fill=%22%23e9e3ff%22/%3E %3Crect x=%2286%22 y=%22342%22 width=%22178%22 height=%2250%22 rx=%2216%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E %3Ccircle cx=%22112%22 cy=%22367%22 r=%2214%22 fill=%22url(%23food2)%22/%3E%3Crect x=%22136%22 y=%22357%22 width=%2290%22 height=%229%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.7%22/%3E%3Crect x=%22136%22 y=%22372%22 width=%2260%22 height=%227%22 rx=%223%22 fill=%22%237b61e8%22 opacity=%22.4%22/%3E %3Crect x=%2286%22 y=%22402%22 width=%22178%22 height=%2250%22 rx=%2216%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E %3Ccircle cx=%22112%22 cy=%22427%22 r=%2214%22 fill=%22url(%23food)%22/%3E%3Crect x=%22136%22 y=%22417%22 width=%2280%22 height=%229%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.7%22/%3E%3Crect x=%22136%22 y=%22432%22 width=%2250%22 height=%227%22 rx=%223%22 fill=%22%237b61e8%22 opacity=%22.4%22/%3E %3Crect x=%2286%22 y=%22470%22 width=%22178%22 height=%2226%22 rx=%2213%22 fill=%22%237b61e8%22/%3E %3C/g%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%22320%22 y=%22120%22 width=%22210%22 height=%22440%22 rx=%2234%22 fill=%22%23fbfaff%22/%3E %3Crect x=%22336%22 y=%22142%22 width=%22110%22 height=%2212%22 rx=%226%22 fill=%22%232a1f5c%22 opacity=%22.85%22/%3E %3Cg transform=%22translate(336 176)%22%3E %3Crect width=%22178%22 height=%2240%22 rx=%2214%22 fill=%22%23efeaff%22/%3E%3Crect x=%2212%22 y=%2214%22 width=%2270%22 height=%229%22 rx=%224%22 fill=%22%237b61e8%22 opacity=%22.6%22/%3E %3Cg transform=%22translate(0 56)%22%3E%3Crect width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22url(%23food)%22/%3E%3Crect x=%2294%22 width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22url(%23food2)%22/%3E%3C/g%3E %3Cg transform=%22translate(0 152)%22%3E%3Crect width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22%23cbbdff%22/%3E%3Crect x=%2294%22 width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22%23ffd9b5%22/%3E%3C/g%3E %3Crect y=%22252%22 width=%22178%22 height=%2244%22 rx=%2214%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E%3Ccircle cx=%2224%22 cy=%22274%22 r=%2211%22 fill=%22%237b61e8%22 opacity=%22.7%22/%3E%3Crect x=%2244%22 y=%22266%22 width=%2284%22 height=%228%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.6%22/%3E %3C/g%3E %3Crect x=%22336%22 y=%22512%22 width=%22178%22 height=%2230%22 rx=%2215%22 fill=%22%232a1f5c%22/%3E %3C/g%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 70%, #e6deff, transparent 70%), linear-gradient(160deg,#7b61e8,#4a3aa6)"></div>
+          <span class="label">Cookey</span>
+          <div class="panel"><h3>Cookey</h3><p class="role">UI/UX Case Study · Konzept bis Prototyp</p>
+            <p class="desc">Eine Essens-App, die Rezepte entdecken, planen und einkaufen in einem Ablauf verbindet.</p>
+            <div class="tags"><span>Figma</span><span>Miro</span><span>Usability-Test</span></div>
+            <p class="kpi">10 Interviews · 5 Usability-Tests</p></div></div>
+      </a>
+      <a class="slot" href="#neuestes-projekt" style="--i:3;--k:0" data-a="#f2b8a6" data-b="#e6c4da" data-c="#c9787a" data-year="2026">
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22a%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffe3d8%22/%3E%3Cstop offset=%221%22 stop-color=%22%23f0a79b%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22b%22 x1=%220%22 y1=%221%22 x2=%221%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23d9a8e6%22/%3E%3Cstop offset=%221%22 stop-color=%22%23b0689a%22/%3E%3C/linearGradient%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2214%22 stdDeviation=%2216%22 flood-color=%22%235a2a45%22 flood-opacity=%22.25%22/%3E%3C/filter%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2280%22 y=%22100%22 width=%22300%22 height=%22220%22 rx=%2230%22 fill=%22url(%23a)%22/%3E %3Ccircle cx=%22410%22 cy=%22190%22 r=%2286%22 fill=%22url(%23b)%22/%3E %3Crect x=%22150%22 y=%22300%22 width=%22330%22 height=%22170%22 rx=%2230%22 fill=%22%23fff%22 opacity=%22.9%22/%3E %3C/g%3E %3Crect x=%22176%22 y=%22328%22 width=%22150%22 height=%2214%22 rx=%227%22 fill=%22%23b0689a%22 opacity=%22.6%22/%3E %3Crect x=%22176%22 y=%22356%22 width=%22260%22 height=%2210%22 rx=%225%22 fill=%22%23b0689a%22 opacity=%22.25%22/%3E %3Crect x=%22176%22 y=%22378%22 width=%22220%22 height=%2210%22 rx=%225%22 fill=%22%23b0689a%22 opacity=%22.25%22/%3E %3Crect x=%22176%22 y=%22414%22 width=%2290%22 height=%2228%22 rx=%2214%22 fill=%22%23e59a86%22/%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 30%, #ffe3d8, transparent 70%), linear-gradient(160deg,#e59a86,#b0689a)"></div>
+          <span class="label">Neuestes Projekt</span>
+          <div class="panel"><h3>Neuestes Projekt</h3><p class="role">Details folgen</p>
+            <p class="desc">Platzhalter für dein aktuelles Projekt. Titel, Rolle und Ergebnis ergänze ich, sobald du sie hast.</p>
+            <div class="tags"><span>UX</span><span>UI</span></div></div></div>
+      </a>
+    </div>
+    <div class="layer floor" id="floor"></div>
+    <div class="layer zones" id="zones"></div>
+  </div>
+</main>
+
+<script>
+  const slots = [...document.querySelectorAll('#cards .slot')];
+  const zonesLayer = document.getElementById('zones');
+  const bg    = document.getElementById('bg');
+  const label = document.getElementById('cursorLabel');
+
+  /* ---- Einstellungen ---- */
+  const OPEN_DELAY = 140;     // ms: erst hebt die Karte ab, dann fährt sie nach links aus
+  const SPREAD_BEHIND = 0.65; // Nachbarn HINTER der Karte: kleiner = ziehen weniger mit
+  const SPREAD_FRONT  = 0.50; // Nachbarn VOR der Karte: ziehen noch weniger mit
+  const K_LIFT_HOVERED = 8;   // Tempo der angewählten Karte (höher = schneller)
+  const K_LIFT_OTHERS  = 4.2; // Nachbarn ziehen etwas träger nach -> Welle
+  const K_OPEN         = 4.6; // Tempo des Ausfahrens
+  const K_COLOR        = 3.2; // Tempo des Farbwechsels
+  const LABEL_AT       = 0.97;// Cursor-Label erst ab diesem Öffnungsgrad
+
+  /* ---- Trefferflächen: eine pro Karte, an der festen Ruheposition ---- */
+  const zones = slots.map((slot, i) => {
+    const z = document.createElement('div');
+    z.className = 'zone';
+    z.dataset.i = i;
+    z.setAttribute('aria-hidden', 'true');
+    z.style.cssText = slot.getAttribute('style');          // übernimmt --i und --k
+    z.addEventListener('click', () => slot.click());
+    zonesLayer.appendChild(z);
+    return z;
+  });
+
+  /* ---- Jahreszahlen auf dem "Boden": eine pro Karte, sichtbar nur bei Hover ---- */
+  const floorLayer = document.getElementById('floor');
+  const nums = slots.map((slot, i) => {
+    const n = document.createElement('div');
+    n.className = 'floor-num';
+    n.style.cssText = slot.getAttribute('style');          // übernimmt --i und --k
+    n.style.setProperty('--c', slot.dataset.c || '#1b1f27');
+    n.setAttribute('aria-hidden', 'true');
+    n.innerHTML = '<span>' + (slot.dataset.year || '') + '</span>';
+    floorLayer.appendChild(n);
+    return n;
+  });
+
+  /* ---- Zustand: alles nähert sich einem Ziel an (kein Springen) ---- */
+  const S = slots.map(() => ({ lift: 0, open: 0, liftT: 0, openT: 0, num: 0 }));
+  let hovered = -1, openTimer = null;
+
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const DEFAULT = { a: hex('#cdd9f2'), b: hex('#e3dcef') };
+  const color = { a: [...DEFAULT.a], b: [...DEFAULT.b] };
+  let colorT = { a: DEFAULT.a, b: DEFAULT.b };
+
+  function updateTargets() {
+    S.forEach((s, i) => {
+      const d = hovered < 0 ? 99 : Math.abs(i - hovered);
+      const sp = i < hovered ? SPREAD_BEHIND : SPREAD_FRONT;
+      s.liftT = hovered < 0 ? 0 : Math.exp(-(d * d) / (2 * sp * sp));
+    });
+  }
+
+  function enter(i) {
+    if (hovered === i) return;
+    hovered = i;
+    clearTimeout(openTimer);
+    label.classList.remove('show');
+    slots.forEach((s, j) => s.classList.toggle('hov', j === i));
+    S.forEach(s => s.openT = 0);
+    updateTargets();
+    colorT = { a: hex(slots[i].dataset.a), b: hex(slots[i].dataset.b) };
+    openTimer = setTimeout(() => { if (hovered === i) S[i].openT = 1; }, OPEN_DELAY);
+  }
+
+  function leaveAll() {
+    hovered = -1;
+    clearTimeout(openTimer);
+    slots.forEach(s => s.classList.remove('hov'));
+    S.forEach(s => s.openT = 0);
+    updateTargets();
+    colorT = { a: DEFAULT.a, b: DEFAULT.b };
+    label.classList.remove('show');
+  }
+
+  slots.forEach((slot, i) => slot.addEventListener('focus', () => enter(i)));
+
+  /* ---- Maus: Trefferfläche bestimmt die Karte. Außerhalb aller Flächen bleibt die angewählte
+          Karte nur aktiv, solange der Zeiger auf ihr selbst ist (ihr "herausgefahrener" Teil). ---- */
+  let overOpenCard = false;
+  window.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse') return;
+    label.style.transform = `translate3d(${e.clientX + 16}px, ${e.clientY + 18}px, 0)`;
+    if (active >= 0) return;                      // während Übergang/Hero keine Hover-Logik
+
+    const t = e.target;
+    const zone = t.closest && t.closest('.zone');
+    const onHovCard = t.closest && t.closest('.slot.hov .card');
+
+    if (zone) enter(+zone.dataset.i);
+    else if (!onHovCard && hovered >= 0) leaveAll();
+
+    overOpenCard = hovered >= 0 && ((zone && +zone.dataset.i === hovered) || !!onHovCard);
+    label.classList.toggle('show', overOpenCard && S[hovered].open >= LABEL_AT);
+  });
+  document.documentElement.addEventListener('pointerleave', () => { if (active >= 0) return; overOpenCard = false; leaveAll(); });
+
+  /* ---- Klick: Maus öffnet direkt die Case Study. Handy: erster Tipp öffnet die Karte, zweiter die Case Study ---- */
+  slots.forEach((slot, i) => {
+    slot.addEventListener('click', e => {
+      e.preventDefault();
+      if (!matchMedia('(hover: hover)').matches && S[i].openT < 1) {
+        hovered = -1; enter(i);
+        S[i].openT = 1;
+        return;
+      }
+      openProject(i);
+    });
+  });
+
+  /* =====================================================================
+     Übergang: Karte -> Vollbild-Hero und zurück
+     Öffnen:  1) Karte wird schräg nach oben links aus dem Stapel gezogen (bleibt in ihrer Ebene)
+              2) sie wechselt nach vorn, wächst zum Vollbild und flacht ab; Texte wachsen mit
+              3) der Rest wird dabei unscharf. Die Taskbar bleibt immer.
+     Zurück:  spiegelbildlich: Karte schrumpft zurück, die anderen Karten machen Platz,
+              die Karte wird eingesteckt, dann rücken alle wieder zusammen.
+     ===================================================================== */
+  const hero = document.getElementById('hero');
+  const $ = id => document.getElementById(id);
+
+  const SC       = 1.08;    // Karte wird beim Herausziehen etwas größer
+  const T_PULL   = 520;     // Phase 1: Herausziehen (ms)
+  const T_GROW   = 1250;    // Phase 2: Aufziehen zum Hero (ms)
+  const T_BACK   = 1100;    // Rückweg: Hero -> herausgezogene Karte (ms)
+  const T_INSERT = 650;     // Rückweg: Karte wird in den Stapel gesteckt (ms)
+  const EASE_PULL   = 'cubic-bezier(.4, 0, .3, 1)';
+  const EASE_GROW   = 'cubic-bezier(.3, .5, .2, 1)';   // startet zügig (schließt an das Herausziehen an), endet weich
+  const EASE_BACK   = 'cubic-bezier(.45, 0, .3, 1)';
+  const EASE_INSERT = 'cubic-bezier(.2, .5, .3, 1)';
+  let active = -1, busy = false, pushed = false;
+
+  const px = n => n + 'px';
+  const rectOf = el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
+  const cssNum = name => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+
+  /* Welche Textzeilen der Karte entsprechen welchem Element im Hero? */
+  const TEXT = [['h3', 'heroTitle'], ['.role', 'heroRole'], ['.desc', 'heroDesc'], ['.tags', 'heroTags'], ['.kpi', 'heroKpi']];
+  const shown = el => el && getComputedStyle(el).display !== 'none';
+
+  /* Kopie der Karte, frei positionierbar (liegt über allem) */
+  function makeClone(card, openVal) {
+    const c = card.cloneNode(true);
+    c.classList.add('morph');
+    c.removeAttribute('style');
+    c.style.setProperty('--open', openVal);
+    c.style.setProperty('--lift', 0);
+    document.body.appendChild(c);
+    return c;
+  }
+
+  /* Rechteck der (gedrehten, skalierten) Karte -> Größe der Kopie ohne Drehung/Skalierung */
+  function cloneBox(R, ryDeg, s) {
+    const w = R.width / Math.cos(ryDeg * Math.PI / 180) / s, h = R.height / s;
+    return { left: R.left + R.width / 2 - w / 2, top: R.top + R.height / 2 - h / 2, width: w, height: h };
+  }
+  const poseTransform = (ry, s) => `perspective(1500px) rotateY(${ry}deg) scale(${s})`;
+
+  function fillHero(i) {
+    const panel = slots[i].querySelector('.panel');
+    const txt = sel => (panel.querySelector(sel) || {}).textContent || '';
+    $('heroTitle').textContent = txt('h3');
+    $('heroRole').textContent  = txt('.role');
+    $('heroDesc').textContent  = txt('.desc');
+    $('heroKpi').textContent   = txt('.kpi');
+    $('heroKpi').style.display = txt('.kpi') ? '' : 'none';
+    $('heroTags').innerHTML    = panel.querySelector('.tags') ? panel.querySelector('.tags').innerHTML : '';
+    hero.style.setProperty('--art', slots[i].querySelector('.art').style.getPropertyValue('--art'));
+  }
+
+  /* Hero befüllen und so formatieren, dass Satz und Tags beim Wachsen dieselben Zeilenumbrüche behalten */
+  function prepHero(i) {
+    fillHero(i);
+    const panel = slots[i].querySelector('.panel');
+    const desc = panel.querySelector('.desc'), tags = panel.querySelector('.tags');
+    const hd = $('heroDesc'), ht = $('heroTags');
+    hero.classList.add('on'); hero.style.opacity = 0;
+    hd.style.maxWidth = ''; ht.style.maxWidth = '';
+    if (shown(desc) && desc.offsetWidth) {
+      const f = parseFloat(getComputedStyle(desc).fontSize), fh = parseFloat(getComputedStyle(hd).fontSize);
+      hd.style.maxWidth = px(desc.offsetWidth * fh / f);
+    }
+    if (shown(tags) && tags.offsetWidth) ht.style.maxWidth = px(tags.offsetWidth * 1.2);
+  }
+
+  /* Position der Hero-Texte im Viewport (Ziel bzw. Start der Textreise) */
+  function measureHero() {
+    const out = {};
+    TEXT.forEach(([sel, id]) => {
+      const el = $(id);
+      if (!shown(el)) return;
+      const r = el.getBoundingClientRect();
+      out[sel] = { left: r.left - 1, top: r.top - 1, width: r.width, font: parseFloat(getComputedStyle(el).fontSize) };  // -1 = Rahmen der Karte
+    });
+    return out;
+  }
+
+  /* Textzeilen der Kopie einzeln beweglich machen. Positionen kommen aus der echten Karte. */
+  function prepFlyers(card, clone) {
+    const srcPanel = card.querySelector('.panel'), dstPanel = clone.querySelector('.panel');
+    const items = [];
+    TEXT.forEach(([sel]) => {
+      const src = srcPanel.querySelector(sel), dst = dstPanel.querySelector(sel);
+      if (!src || !dst || !shown(src)) return;
+      items.push({ sel, el: dst, left: src.offsetLeft, top: src.offsetTop, width: src.offsetWidth,
+                   font: parseFloat(getComputedStyle(src).fontSize) });
+    });
+    items.forEach(it => Object.assign(it.el.style, {
+      position: 'absolute', left: px(it.left), top: px(it.top), width: px(it.width), margin: '0',
+      transform: 'none', transformOrigin: '0 0',
+      whiteSpace: (it.sel === '.desc' || it.sel === '.tags') ? 'normal' : 'nowrap'
+    }));
+    return items;
+  }
+
+  /* Textreise: Karte <-> Hero. Tags werden skaliert (Hero-Tags sind exakt 1,2-fach), alles andere wächst per Schriftgröße */
+  function flyText(items, target, toHero, opts) {
+    items.forEach(it => {
+      const h = target[it.sel];
+      if (!h) return;
+      const c = { left: px(it.left), top: px(it.top), width: px(it.width), fontSize: px(it.font) };
+      const t = { left: px(h.left), top: px(h.top), width: px(it.sel === '.desc' ? h.width : it.width), fontSize: px(it.sel === '.tags' ? it.font : h.font) };
+      if (it.sel === '.tags') { c.transform = 'scale(1)'; t.transform = 'scale(1.2)'; }
+      it.el.animate(toHero ? [c, t] : [t, c], opts);
+    });
+  }
+
+  const fullFrame = () => ({ left: '0px', top: '0px', width: px(innerWidth), height: px(innerHeight), borderRadius: '0px',
+    transform: poseTransform(0, 1), backdropFilter: 'blur(0px) saturate(100%)' });
+  const boxFrame = (b, ry) => ({ left: px(b.left), top: px(b.top), width: px(b.width), height: px(b.height), borderRadius: '22px',
+    transform: poseTransform(ry, SC), backdropFilter: 'blur(18px) saturate(150%)' });
+
+  /* ---------------- Öffnen ---------------- */
+  function openProject(i) {
+    if (busy || active >= 0) return;
+    busy = true; active = i;
+    clearTimeout(openTimer);
+    label.classList.remove('show');
+
+    const slot = slots[i], card = slot.querySelector('.card');
+    const ry = cssNum('--ry'), w = parseFloat(getComputedStyle(slot).width);
+    prepHero(i);
+
+    // Phase 1: Karte schräg nach oben links aus dem Stapel ziehen. Sie bleibt dabei in ihrer Ebene
+    // (hinter den vorderen Karten) und wird etwas größer.
+    const ty = new DOMMatrix(getComputedStyle(card).transform).m42;
+    card.style.transformOrigin = '100% 100%';
+    card.animate([
+      { transform: `translate(0px, ${ty}px) scale(1)` },
+      { transform: `translate(${-1.15 * w}px, ${ty - 0.28 * w}px) scale(${SC})` }
+    ], { duration: T_PULL, easing: EASE_PULL, fill: 'forwards' });
+
+    // kurz bevor sie ganz frei ist, übernimmt die Kopie (nichts überdeckt sie mehr, der Wechsel bleibt unsichtbar)
+    setTimeout(() => grow(i, ry), T_PULL * .72);
+  }
+
+  /* Phase 2: Kopie wächst zum Vollbild, Texte wachsen mit, der Rest wird unscharf */
+  function grow(i, ry) {
+    const slot = slots[i], card = slot.querySelector('.card');
+    const box = cloneBox(rectOf(card), ry, SC);
+    const clone = makeClone(card, 1);
+    Object.assign(clone.style, { left: px(box.left), top: px(box.top), width: px(box.width), height: px(box.height) });
+    const art = clone.querySelector('.art'), artW = parseFloat(getComputedStyle(card.querySelector('.art')).width);
+    const items = prepFlyers(card, clone);
+    const target = measureHero();
+    const missing = TEXT.filter(([sel, id]) => shown($(id)) && !items.some(it => it.sel === sel)).map(([, id]) => $(id));
+    missing.forEach(el => el.style.opacity = 0);        // Zeilen ohne Gegenstück auf der Karte (z. B. klein auf dem Handy)
+
+    slot.style.visibility = 'hidden';
+    document.body.classList.add('opening');             // Stapel + Riffeln werden unscharf, Taskbar bleibt
+
+    const o = { duration: T_GROW, easing: EASE_GROW, fill: 'both' };
+    clone.animate([boxFrame(box, ry), fullFrame()], o);
+    art.animate([{ width: px(artW) }, { width: px(innerWidth) }], o);
+    clone.querySelector('.panel').animate([{ backgroundColor: 'rgba(255,255,255,.68)' }, { backgroundColor: 'rgba(255,255,255,0)' }],
+      { duration: T_GROW * .6, easing: 'ease-out', fill: 'both' });
+    flyText(items, target, true, o);
+
+    setTimeout(() => hero.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 340, easing: 'ease-in-out', fill: 'forwards' }), T_GROW - 360);
+    setTimeout(() => {
+      hero.getAnimations().forEach(a => a.cancel());
+      hero.style.opacity = 1;
+      hero.classList.add('ready');
+      clone.remove();
+      missing.forEach(el => { el.style.opacity = ''; el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 700, easing: 'ease-out' }); });
+      try { history.pushState({ p: i }, '', '#' + (slot.getAttribute('href') || '').replace('#', '')); pushed = true; } catch (e) { pushed = false; }
+      busy = false;
+    }, T_GROW + 40);
+  }
+
+  /* ---------------- Zurück ---------------- */
+  function closeProject() {
+    if (busy || active < 0) return;
+    busy = true;
+    const i = active, slot = slots[i], card = slot.querySelector('.card');
+    const ry = cssNum('--ry'), w = parseFloat(getComputedStyle(slot).width);
+
+    // Echte Karte (unsichtbar) in die "herausgezogene" Pose bringen, damit wir das Ziel der Rückreise messen können
+    hovered = i; slots.forEach((s, j) => s.classList.toggle('hov', j === i));
+    updateTargets();
+    S.forEach((s, j) => { s.lift = s.liftT; s.open = s.openT = (j === i ? 1 : 0);
+      slots[j].style.setProperty('--lift', s.lift.toFixed(4)); slots[j].style.setProperty('--open', s.open.toFixed(4)); });
+    card.getAnimations().forEach(a => a.cancel());
+    const ty = new DOMMatrix(getComputedStyle(card).transform).m42;
+    const away = `translate(${-1.15 * w}px, ${ty - 0.28 * w}px) scale(${SC})`;
+    card.style.transformOrigin = '100% 100%';
+    const pose = card.animate([{ transform: away }, { transform: away }], { duration: 1, fill: 'forwards' });
+    const box = cloneBox(rectOf(card), ry, SC);
+
+    const clone = makeClone(card, 1);
+    clone.style.opacity = 0;
+    const art = clone.querySelector('.art'), artW = parseFloat(getComputedStyle(card.querySelector('.art')).width);
+    const items = prepFlyers(card, clone);
+    const target = measureHero();
+
+    document.body.classList.remove('opening');          // Stapel + Riffeln werden wieder scharf (mit kurzer Verzögerung)
+    hero.classList.remove('ready');
+
+    // Phase A: Kopie schrumpft zurück zur herausgezogenen Karte, Texte schrumpfen mit
+    const oA = { duration: T_BACK, easing: EASE_BACK, fill: 'both' };
+    clone.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out', fill: 'both' });
+    clone.animate([fullFrame(), boxFrame(box, ry)], oA);
+    art.animate([{ width: px(innerWidth) }, { width: px(artW) }], oA);
+    clone.querySelector('.panel').animate([{ backgroundColor: 'rgba(255,255,255,0)' }, { backgroundColor: 'rgba(255,255,255,.68)' }],
+      { duration: T_BACK, easing: 'ease-in', fill: 'both' });
+    flyText(items, target, false, oA);
+    setTimeout(() => { hero.classList.remove('on'); hero.style.opacity = 0; }, 320);
+
+    // Die anderen Karten machen Platz (rücken auseinander), später wieder zusammen
+    const g = 0.16 * w;
+    slots.forEach((s, j) => {
+      if (j === i) return;
+      const d = Math.abs(j - i), f = [1, .6, .35][d - 1] || .3, sg = j > i ? 1 : -1;
+      const sp = `${sg * g * f}px ${sg * g * f * .5}px`;
+      s.animate([
+        { translate: '0px 0px', easing: 'ease-in-out' },
+        { translate: sp, offset: .38 },
+        { translate: sp, offset: .58, easing: 'ease-in-out' },
+        { translate: '0px 0px' }
+      ], { delay: T_BACK * .5, duration: 1200, fill: 'forwards' });
+    });
+
+    // Phase B: echte Karte übernimmt (unsichtbarer Wechsel) und wird in die Lücke gesteckt
+    setTimeout(() => {
+      clone.remove();
+      slot.style.visibility = '';
+      pose.cancel();
+      leaveAll();                                        // Karte wird schmal, Hintergrundfarbe geht zurück
+      card.animate([{ transform: away }, { transform: 'translate(0px, 0px) scale(1)' }],
+        { duration: T_INSERT, easing: EASE_INSERT, fill: 'forwards' });
+    }, T_BACK * .9);
+
+    setTimeout(() => {
+      slots.forEach(s => s.getAnimations().forEach(a => a.cancel()));
+      card.getAnimations().forEach(a => a.cancel());
+      card.style.transformOrigin = '';
+      active = -1; busy = false;
+    }, T_BACK * .5 + 1200 + 80);
+  }
+
+  $('heroBack').addEventListener('click', () => {
+    if (pushed) { pushed = false; try { history.back(); return; } catch (e) {} }
+    closeProject();
+  });
+  window.addEventListener('popstate', () => { pushed = false; if (active >= 0) closeProject(); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && active >= 0) { pushed = false; closeProject(); } });
+
+  /* ---- Animationsschleife: jeder Wert nähert sich seinem Ziel, unabhängig von der Bildrate ---- */
+  const approach = (cur, target, k, dt) => cur + (target - cur) * (1 - Math.exp(-k * dt));
+  let last = performance.now();
+
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+
+    S.forEach((s, i) => {
+      s.lift = approach(s.lift, s.liftT, i === hovered ? K_LIFT_HOVERED : K_LIFT_OTHERS, dt);
+      s.open = approach(s.open, s.openT, K_OPEN, dt);
+      if (Math.abs(s.open - s.openT) < 0.0005) s.open = s.openT;
+      slots[i].style.setProperty('--lift', s.lift.toFixed(4));
+      slots[i].style.setProperty('--open', s.open.toFixed(4));
+      // Jahreszahl: nur unter der angewählten Karte, nicht während Case Study / Übergang
+      s.num = approach(s.num, (i === hovered && active < 0) ? 1 : 0, 5, dt);
+      nums[i].style.setProperty('--num', s.num.toFixed(3));
+    });
+
+    for (const k of ['a', 'b']) {
+      for (let c = 0; c < 3; c++) color[k][c] = approach(color[k][c], colorT[k][c], K_COLOR, dt);
+      bg.style.setProperty('--theme-' + k, `rgb(${color[k].map(Math.round).join(',')})`);
+    }
+
+    // Label erscheint, sobald die Karte voll ausgefahren ist (auch ohne Mausbewegung)
+    if (hovered >= 0 && overOpenCard && S[hovered].open >= LABEL_AT) label.classList.add('show');
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
