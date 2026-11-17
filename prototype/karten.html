@@ -7,11 +7,13 @@
 <style>
   /* ---------- Einstellungen zum Herumspielen ---------- */
   :root {
-    --card-w: clamp(150px, 22vw, 300px);    /* Karten sind quadratisch */
+    /* Anzahl der Karten und Staffelung werden vom Skript (Admin-Menü) gesetzt: --n, --sc, --fdx, --fdy, --fdz */
+    --n: 4; --sc: 1; --fdx: .21; --fdy: .11; --fdz: .47; --zm: 1;
+    --card-w: calc(clamp(150px, 22vw, 300px) * var(--sc));    /* Karten sind quadratisch */
     --card-h: var(--card-w);
-    --dx: calc(var(--card-w) * 0.21);       /* Seitenversatz pro hinterer Karte */
-    --dy: calc(var(--card-w) * 0.11);       /* Höhenversatz; den Rest macht die Perspektive */
-    --dz: 140px;                          /* Tiefe pro Karte: hintere Karten rücken wirklich nach hinten */
+    --dx: calc(var(--card-w) * var(--fdx));    /* Seitenversatz pro hinterer Karte */
+    --dy: calc(var(--card-w) * var(--fdy));    /* Höhenversatz; den Rest macht die Perspektive */
+    --dz: calc(var(--card-w) * var(--fdz) * var(--zm));   /* Tiefe pro Karte: hintere Karten rücken wirklich nach hinten */
     --rx: 0deg;                             /* kein Kippen nach hinten/vorne mehr */
     --ry: 20deg;                            /* Vorderseite zeigt nach rechts (linke Kante vorn, rechte hinten) */
     --ry-open: 0deg;                        /* so viel dreht die Karte beim Ausfahren zurück (0 = Winkel bleibt) */
@@ -64,6 +66,33 @@
     background: var(--ink); color: #fff; font-weight: 500; opacity: 1;
   }
 
+  /* ---------- Admin-Menü (oben rechts) ---------- */
+  .admin { position: fixed; top: 18px; right: 18px; z-index: 130; font-size: 13.5px; }
+  .admin-btn {
+    padding: 9px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.95);
+    background: rgba(255,255,255,.72); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer;
+    backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: 0 6px 24px rgba(60, 50, 40, .08); transition: background .25s ease;
+  }
+  .admin-btn:hover { background: rgba(255,255,255,.95); }
+  .admin-panel {
+    position: absolute; top: 46px; right: 0; width: 210px; padding: 14px;
+    border-radius: 18px; border: 1px solid rgba(255,255,255,.95);
+    background: rgba(255,255,255,.86); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 10px 30px rgba(60, 50, 40, .12);
+  }
+  .admin-panel[hidden] { display: none; }
+  .admin-panel p { font-size: 12px; opacity: .65; margin-bottom: 8px; }
+  .admin-panel .note { margin: 10px 0 0; font-size: 11.5px; opacity: .5; }
+  .seg { display: flex; gap: 6px; }
+  .seg button {
+    flex: 1; padding: 8px 0; border-radius: 12px; border: 1px solid rgba(27,31,39,.14);
+    background: rgba(255,255,255,.7); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer;
+    transition: background .2s ease, color .2s ease;
+  }
+  .seg button:hover { background: #fff; }
+  .seg button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+
   /* ---------- Bühne ---------- */
   .stage {
     position: relative; z-index: 2;
@@ -75,8 +104,8 @@
     position: relative;
     /* Zurück aus dem Hero: Stapel wird erst nach kurzer Verzögerung wieder scharf (Karte ist dann schon unterwegs) */
     transition: opacity .9s ease .2s, filter .9s ease .2s;
-    width: calc(var(--card-w) + var(--dx) * 3);               /* 4 Karten = 3 Abstände */
-    height: calc(var(--card-h) + var(--dy) * 3 + var(--lift-max));
+    width: calc(var(--card-w) + var(--dx) * (var(--n) - 1));               /* n Karten = n-1 Abstände */
+    height: calc(var(--card-h) + var(--dy) * (var(--n) - 1) + var(--lift-max));
     margin-bottom: calc(var(--lift-max) * .45);                 /* schiebt den Stapel etwas nach oben (optisch mittiger) */
   }
 
@@ -89,36 +118,34 @@
     perspective-origin: 8% 8%;     /* Fluchtpunkt oben links: der Stapel läuft nach links hinten weg */
   }
   .layer.cards { z-index: 2; }
-  .layer.floor { z-index: 2; pointer-events: none; }   /* liegt (im DOM) nach den Karten, also optisch davor */
   .layer.zones { z-index: 3; }
 
-  /* Jahreszahl: liegt flach auf einem (unsichtbaren) Boden vor dem Stapel, in der "Bahn" ihrer Karte.
-     rotateX(90deg) legt sie hin; ihr oberes Ende zeigt nach hinten zum Fluchtpunkt. */
-  .floor-num {
-    --num: 0;                                   /* 0..1, vom Skript gesetzt */
-    position: absolute;
-    left: calc(var(--i) * var(--dx) - var(--card-w) * .3);   /* Mitte = Mitte der Karte (Bahn) */
-    top: 100%;                                  /* beginnt an der Standlinie der vordersten Karte */
-    width: calc(var(--card-w) * 1.6);
-    height: calc(var(--card-w) * .5);
-    transform-origin: 50% 0;
-    /* scaleY streckt die Ziffern in Tiefenrichtung: von oben gesehen wird liegende Schrift sehr flach (Anamorphose) */
-    transform: translateZ(30px) rotateX(90deg) scaleY(2.6) translateY(calc((1 - var(--num)) * -14px));  /* gleitet beim Erscheinen nach vorn */
-    opacity: calc(var(--num) * .62);
-    color: var(--c);
-    pointer-events: none;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);   /* läuft zum Fluchtpunkt hin aus */
-            mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
-  }
-  .floor-num span {
-    display: block; text-align: center; white-space: nowrap;
-    font-size: calc(var(--card-w) * .5); font-weight: 700; letter-spacing: -.04em; line-height: 1;
+  /* Jahreszahl auf der HINTEREN WAND: eine senkrechte Ebene weit hinter dem Stapel, im gleichen Winkel (rotateY) wie die Karten.
+     Sie wirkt, als wäre die Zahl auf die Wand geschrieben: groß, in der Farbe der Karte, leicht transparent und weich.
+     Sie wird (von links nach rechts) "hingeschrieben" und erscheint erst am Ende des Ausfahrens der Karte. */
+  .wall-year {
+    --num: 0;                                                           /* 0..1, vom Skript gesetzt */
+    /* Die Box ist bewusst deutlich größer als die Schrift: Maske und Weichzeichner schneiden sonst am Boxrand ab (Rechteck). */
+    position: absolute; left: 50%; width: calc(var(--card-w) * 3.2); margin-left: calc(var(--card-w) * -1.6);
+    top: calc(-8% - var(--card-w) * .7); height: calc(var(--card-w) * 1.4);   /* Mitte etwas über dem Stapel, damit die Zahl nicht komplett hinter der herausgezogenen Karte verschwindet */
+    z-index: -1;                                                        /* hinter allen Karten */
+    transform: translateZ(calc(-1 * ((var(--n) - 1) * var(--dz) + var(--card-w) * 1.6))) rotateY(var(--ry));
+    transform-origin: 50% 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Segoe UI", system-ui, sans-serif;
+    font-size: calc(var(--card-w) * .8); font-weight: 700; letter-spacing: -.05em; line-height: 1; white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    opacity: calc(var(--num) * .3);
+    filter: blur(calc(2px + (1 - var(--num)) * 8px));                   /* wirkt wie auf die Wand gemalt, nicht gestochen scharf */
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(var(--num) * 130% - 30%), transparent calc(var(--num) * 130%));
+            mask-image: linear-gradient(90deg, #000 0, #000 calc(var(--num) * 130% - 30%), transparent calc(var(--num) * 130%));
+    pointer-events: none; user-select: none;
   }
 
   .slot, .zone {
     --lift: 0;   /* 0..1, jeden Frame vom Skript gesetzt */
     --open: 0;   /* 0..1, wie weit die Karte ausgefahren ist */
+    --num: 0;    /* 0..1, Sichtbarkeit der Jahreszahl */
     position: absolute;
     left: calc(var(--i) * var(--dx));
     bottom: calc(var(--k) * var(--dy));
@@ -209,14 +236,25 @@
   /* Alles, was nicht zum Projekt gehört, wird langsam unscharf und blendet aus */
   /* (Die Taskbar bleibt immer unverändert.) Kein scale auf dem Stapel: das würde die Messung der Kartenpositionen verfälschen. */
   body.opening .stack {
-    opacity: 0; filter: blur(16px); pointer-events: none;
+    opacity: 0; filter: blur(8px); pointer-events: none;     /* weniger Blur = deutlich billiger */
     transition: opacity 1s ease, filter 1s ease;
   }
+  /* Viele Karten (10/15): Glas-Weichzeichner aus. Übereinanderliegend verstärken sich Sättigung und Kosten sonst stark. */
+  body.dense .card:not(.morph) {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: linear-gradient(160deg, rgba(255,255,255,.62), rgba(255,255,255,.34));
+  }
+  /* Während der Animation kein Glas-Weichzeichner auf den Karten (Blur auf Blur ist sehr teuer) */
+  body.opening .card { backdrop-filter: none; -webkit-backdrop-filter: none; }
 
-  /* Kopie der Karte, die beim Klick auf den Bildschirm wächst bzw. zurückschrumpft */
+  /* Kopie der Karte, die beim Klick auf den Bildschirm wächst bzw. zurückschrumpft.
+     Kein backdrop-filter: stattdessen eine etwas deckendere weiße Fläche, die das Glas nachahmt. */
   .card.morph {
     position: fixed; right: auto; bottom: auto; z-index: 100;
     transform: none; pointer-events: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: linear-gradient(160deg, rgba(255,255,255,.72), rgba(255,255,255,.4));
+    contain: layout paint;
     will-change: left, top, width, height, transform;
   }
 
@@ -261,7 +299,7 @@
 
   /* ---------- Handy ---------- */
   @media (max-width: 700px) {
-    :root { --open-extra: 0.9; --ry: 16deg; --ry-open: 0deg; --dz: 110px; }
+    :root { --open-extra: 0.9; --ry: 16deg; --ry-open: 0deg; --zm: 1.57; }
     .nav { gap: 14px; }
     .nav .links { display: none; }
     .panel { padding: 16px 14px; }
@@ -285,6 +323,19 @@
 </nav>
 <div class="cursor-label" id="cursorLabel">Case Study angucken</div>
 
+<!-- Admin-Menü: Anzahl der angezeigten Projekte -->
+<div class="admin" id="admin">
+  <button class="admin-btn" id="adminBtn" type="button" aria-expanded="false" aria-controls="adminPanel">Admin</button>
+  <div class="admin-panel" id="adminPanel" hidden>
+    <p>Projekte anzeigen</p>
+    <div class="seg" role="group" aria-label="Anzahl der Projekte">
+      <button type="button" data-n="4">4</button><button type="button" data-n="5">5</button>
+      <button type="button" data-n="10">10</button><button type="button" data-n="15">15</button>
+    </div>
+    <p class="note">Mehr als 4 sind Platzhalter (hinten).</p>
+  </div>
+</div>
+
 <!-- Vollbild-Hero der Case Study (wird per Skript befüllt) -->
 <section class="hero" id="hero" aria-label="Case Study">
   <div class="hero-art"></div><div class="hero-veil"></div>
@@ -304,14 +355,14 @@
            data-a / data-b = Akzentfarben für den Hintergrund. Farben aus den Projekten:
            Cookey = Violett, Masterarbeit = Grün/Teal, Bachelorarbeit = Industrieblau. -->
       <a class="slot" href="#bachelorarbeit" style="--i:0;--k:3" data-a="#8fb2e0" data-b="#aeb8c7" data-c="#2f6fb5" data-year="2022">
-        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2216%22 stdDeviation=%2218%22 flood-color=%22%230a1a2e%22 flood-opacity=%22.4%22/%3E%3C/filter%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2240%22 y=%22110%22 width=%22520%22 height=%22340%22 rx=%2222%22 fill=%22%2327354a%22/%3E %3C/g%3E %3Crect x=%2240%22 y=%22110%22 width=%2264%22 height=%22340%22 rx=%2222%22 fill=%22%231d2a3c%22/%3E %3Cg fill=%22%238fb2e0%22 opacity=%22.9%22%3E %3Crect x=%2260%22 y=%22136%22 width=%2224%22 height=%2224%22 rx=%226%22/%3E%3Crect x=%2260%22 y=%22180%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3Crect x=%2260%22 y=%22224%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E%3Crect x=%2260%22 y=%22268%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3Crect x=%2260%22 y=%22400%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3C/g%3E %3Crect x=%22124%22 y=%22128%22 width=%22420%22 height=%2228%22 rx=%228%22 fill=%22%232f6fb5%22/%3E %3Crect x=%22138%22 y=%22138%22 width=%2290%22 height=%228%22 rx=%224%22 fill=%22%23fff%22 opacity=%22.8%22/%3E %3Crect x=%22124%22 y=%22172%22 width=%22290%22 height=%22250%22 rx=%2212%22 fill=%22%231d2a3c%22/%3E %3Cg stroke=%22%233a4a63%22 stroke-width=%221%22%3E %3Cline x1=%22140%22 y1=%22210%22 x2=%22400%22 y2=%22210%22/%3E%3Cline x1=%22140%22 y1=%22250%22 x2=%22400%22 y2=%22250%22/%3E %3Cline x1=%22140%22 y1=%22290%22 x2=%22400%22 y2=%22290%22/%3E%3Cline x1=%22140%22 y1=%22330%22 x2=%22400%22 y2=%22330%22/%3E%3Cline x1=%22140%22 y1=%22370%22 x2=%22400%22 y2=%22370%22/%3E %3C/g%3E %3Cline x1=%22140%22 y1=%22226%22 x2=%22400%22 y2=%22226%22 stroke=%22%23e5606a%22 stroke-width=%222%22 stroke-dasharray=%226 5%22/%3E %3Cline x1=%22140%22 y1=%22364%22 x2=%22400%22 y2=%22364%22 stroke=%22%23e5606a%22 stroke-width=%222%22 stroke-dasharray=%226 5%22/%3E %3Cpolyline fill=%22none%22 stroke=%22%23f4d35e%22 stroke-width=%223%22 stroke-linejoin=%22round%22 points=%22140,330 170,300 195,312 220,262 245,280 270,250 295,300 320,272 345,310 372,262 400,290%22/%3E %3Cpolyline fill=%22none%22 stroke=%22%236fb1ff%22 stroke-width=%222.5%22 stroke-linejoin=%22round%22 opacity=%22.85%22 points=%22140,350 175,340 205,346 240,322 270,336 300,330 335,344 370,326 400,334%22/%3E %3Crect x=%22430%22 y=%22172%22 width=%22114%22 height=%22250%22 rx=%2212%22 fill=%22%231d2a3c%22/%3E %3Cg fill=%22%238fb2e0%22 opacity=%22.85%22%3E %3Crect x=%22444%22 y=%22190%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22208%22 width=%2246%22 height=%2214%22 rx=%225%22 fill=%22%23f4d35e%22/%3E %3Crect x=%22444%22 y=%22244%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22262%22 width=%2256%22 height=%2214%22 rx=%225%22 fill=%22%236fb1ff%22/%3E %3Crect x=%22444%22 y=%22298%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22316%22 width=%2238%22 height=%2214%22 rx=%225%22/%3E %3C/g%3E %3Ccircle cx=%22470%22 cy=%22382%22 r=%2213%22 fill=%22%233fae82%22/%3E%3Ccircle cx=%22508%22 cy=%22382%22 r=%2213%22 fill=%22%233a4a63%22/%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%22260%22 y=%22400%22 width=%22300%22 height=%22150%22 rx=%2218%22 fill=%22%2327354a%22/%3E %3C/g%3E %3Cg%3E %3Crect x=%22276%22 y=%22418%22 width=%22268%22 height=%2216%22 rx=%226%22 fill=%22%232f6fb5%22/%3E %3Crect x=%22276%22 y=%22446%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22446%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E %3Crect x=%22276%22 y=%22470%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22470%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%238fb2e0%22 opacity=%22.7%22/%3E %3Crect x=%22276%22 y=%22494%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22494%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E %3C/g%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 25%, #d5e4f8, transparent 70%), linear-gradient(160deg,#2f6fb5,#2c3d52)"></div>
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Crect x=%2234%22 y=%22128%22 width=%22532%22 height=%22348%22 rx=%2226%22 fill=%22%230a1a2e%22 opacity=%22.3%22/%3E %3Crect x=%2240%22 y=%22110%22 width=%22520%22 height=%22340%22 rx=%2222%22 fill=%22%2327354a%22/%3E %3Crect x=%2240%22 y=%22110%22 width=%2264%22 height=%22340%22 rx=%2222%22 fill=%22%231d2a3c%22/%3E %3Cg fill=%22%238fb2e0%22 opacity=%22.9%22%3E %3Crect x=%2260%22 y=%22136%22 width=%2224%22 height=%2224%22 rx=%226%22/%3E%3Crect x=%2260%22 y=%22180%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3Crect x=%2260%22 y=%22224%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E%3Crect x=%2260%22 y=%22268%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3Crect x=%2260%22 y=%22400%22 width=%2224%22 height=%2224%22 rx=%226%22 opacity=%22.6%22/%3E %3C/g%3E %3Crect x=%22124%22 y=%22128%22 width=%22420%22 height=%2228%22 rx=%228%22 fill=%22%232f6fb5%22/%3E %3Crect x=%22138%22 y=%22138%22 width=%2290%22 height=%228%22 rx=%224%22 fill=%22%23fff%22 opacity=%22.8%22/%3E %3Crect x=%22124%22 y=%22172%22 width=%22290%22 height=%22250%22 rx=%2212%22 fill=%22%231d2a3c%22/%3E %3Cg stroke=%22%233a4a63%22 stroke-width=%221%22%3E %3Cline x1=%22140%22 y1=%22210%22 x2=%22400%22 y2=%22210%22/%3E%3Cline x1=%22140%22 y1=%22250%22 x2=%22400%22 y2=%22250%22/%3E %3Cline x1=%22140%22 y1=%22290%22 x2=%22400%22 y2=%22290%22/%3E%3Cline x1=%22140%22 y1=%22330%22 x2=%22400%22 y2=%22330%22/%3E%3Cline x1=%22140%22 y1=%22370%22 x2=%22400%22 y2=%22370%22/%3E %3C/g%3E %3Cline x1=%22140%22 y1=%22226%22 x2=%22400%22 y2=%22226%22 stroke=%22%23e5606a%22 stroke-width=%222%22 stroke-dasharray=%226 5%22/%3E %3Cline x1=%22140%22 y1=%22364%22 x2=%22400%22 y2=%22364%22 stroke=%22%23e5606a%22 stroke-width=%222%22 stroke-dasharray=%226 5%22/%3E %3Cpolyline fill=%22none%22 stroke=%22%23f4d35e%22 stroke-width=%223%22 stroke-linejoin=%22round%22 points=%22140,330 170,300 195,312 220,262 245,280 270,250 295,300 320,272 345,310 372,262 400,290%22/%3E %3Cpolyline fill=%22none%22 stroke=%22%236fb1ff%22 stroke-width=%222.5%22 stroke-linejoin=%22round%22 opacity=%22.85%22 points=%22140,350 175,340 205,346 240,322 270,336 300,330 335,344 370,326 400,334%22/%3E %3Crect x=%22430%22 y=%22172%22 width=%22114%22 height=%22250%22 rx=%2212%22 fill=%22%231d2a3c%22/%3E %3Cg fill=%22%238fb2e0%22 opacity=%22.85%22%3E %3Crect x=%22444%22 y=%22190%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22208%22 width=%2246%22 height=%2214%22 rx=%225%22 fill=%22%23f4d35e%22/%3E %3Crect x=%22444%22 y=%22244%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22262%22 width=%2256%22 height=%2214%22 rx=%225%22 fill=%22%236fb1ff%22/%3E %3Crect x=%22444%22 y=%22298%22 width=%2270%22 height=%228%22 rx=%224%22/%3E%3Crect x=%22444%22 y=%22316%22 width=%2238%22 height=%2214%22 rx=%225%22/%3E %3C/g%3E %3Ccircle cx=%22470%22 cy=%22382%22 r=%2213%22 fill=%22%233fae82%22/%3E%3Ccircle cx=%22508%22 cy=%22382%22 r=%2213%22 fill=%22%233a4a63%22/%3E %3Crect x=%22254%22 y=%22418%22 width=%22312%22 height=%22150%22 rx=%2220%22 fill=%22%230a1a2e%22 opacity=%22.3%22/%3E %3Crect x=%22260%22 y=%22400%22 width=%22300%22 height=%22150%22 rx=%2218%22 fill=%22%2327354a%22/%3E %3Crect x=%22276%22 y=%22418%22 width=%22268%22 height=%2216%22 rx=%226%22 fill=%22%232f6fb5%22/%3E %3Crect x=%22276%22 y=%22446%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22446%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E %3Crect x=%22276%22 y=%22470%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22470%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%238fb2e0%22 opacity=%22.7%22/%3E %3Crect x=%22276%22 y=%22494%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E%3Crect x=%22414%22 y=%22494%22 width=%22130%22 height=%2214%22 rx=%225%22 fill=%22%233a4a63%22/%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 25%, #d5e4f8, transparent 70%), linear-gradient(160deg,#2f6fb5,#2c3d52)"></div>
           <span class="label">Bachelorarbeit</span>
           <div class="panel"><h3>Bachelorarbeit</h3><p class="role">Star Micronics · UI-Entwicklung</p>
             <p class="desc">Echtzeit-Überwachung von Werkzeugen in der Fertigung, vom Mockup bis zur Anwendung.</p>
             <div class="tags"><span>Qt Creator</span><span>C++</span><span>Mockups</span></div></div></div>
       </a>
       <a class="slot" href="#masterarbeit" style="--i:1;--k:2" data-a="#8fd4b0" data-b="#b9a8e6" data-c="#2f9e86" data-year="2024">
-        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3Cfilter id=%22blur%22 x=%22-10%%22 y=%22-10%%22 width=%22120%%22 height=%22120%%22%3E%3CfeGaussianBlur stdDeviation=%227%22/%3E%3C/filter%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2214%22 stdDeviation=%2216%22 flood-color=%22%230d3b3a%22 flood-opacity=%22.3%22/%3E%3C/filter%3E %3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%237fe0b4%22/%3E%3Cstop offset=%221%22 stop-color=%22%232f9e86%22/%3E%3C/linearGradient%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2250%22 y=%22130%22 width=%22360%22 height=%22280%22 rx=%2226%22 fill=%22%23f6fffb%22/%3E %3C/g%3E %3Cg filter=%22url(%23blur)%22%3E %3Crect x=%2270%22 y=%22150%22 width=%22320%22 height=%2240%22 rx=%2214%22 fill=%22%23cdeee0%22/%3E %3Crect x=%2270%22 y=%22204%22 width=%22150%22 height=%22190%22 rx=%2218%22 fill=%22url(%23g)%22/%3E %3Crect x=%22232%22 y=%22204%22 width=%22158%22 height=%2286%22 rx=%2218%22 fill=%22%23bfe9dc%22/%3E %3Crect x=%22232%22 y=%22304%22 width=%22158%22 height=%2290%22 rx=%2218%22 fill=%22%238d79e0%22 opacity=%22.85%22/%3E %3Ccircle cx=%22145%22 cy=%22300%22 r=%2242%22 fill=%22%23fff%22 opacity=%22.6%22/%3E %3C/g%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%22340%22 y=%22200%22 width=%22200%22 height=%22370%22 rx=%2232%22 fill=%22%23f6fffb%22/%3E %3C/g%3E %3Cg filter=%22url(%23blur)%22%3E %3Crect x=%22358%22 y=%22222%22 width=%22164%22 height=%2234%22 rx=%2212%22 fill=%22%23cdeee0%22/%3E %3Crect x=%22358%22 y=%22270%22 width=%22164%22 height=%22120%22 rx=%2220%22 fill=%22url(%23g)%22/%3E %3Crect x=%22358%22 y=%22404%22 width=%2276%22 height=%2270%22 rx=%2216%22 fill=%22%238d79e0%22 opacity=%22.85%22/%3E %3Crect x=%22446%22 y=%22404%22 width=%2276%22 height=%2270%22 rx=%2216%22 fill=%22%23bfe9dc%22/%3E %3Crect x=%22358%22 y=%22488%22 width=%22164%22 height=%2250%22 rx=%2216%22 fill=%22%23cdeee0%22/%3E %3C/g%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 65% 30%, #d6f7e8, transparent 70%), linear-gradient(160deg,#3fae82,#1d6f66)"></div>
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%238fe6bd%22/%3E%3Cstop offset=%221%22 stop-color=%22%232f9e86%22/%3E%3C/linearGradient%3E %3CradialGradient id=%22s1%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffffff%22 stop-opacity=%22.75%22/%3E%3Cstop offset=%221%22 stop-color=%22%23ffffff%22 stop-opacity=%220%22/%3E%3C/radialGradient%3E %3CradialGradient id=%22s2%22%3E%3Cstop offset=%220%22 stop-color=%22%238d79e0%22 stop-opacity=%22.9%22/%3E%3Cstop offset=%221%22 stop-color=%22%238d79e0%22 stop-opacity=%220%22/%3E%3C/radialGradient%3E %3CradialGradient id=%22s3%22%3E%3Cstop offset=%220%22 stop-color=%22%230d3b3a%22 stop-opacity=%22.28%22/%3E%3Cstop offset=%221%22 stop-color=%22%230d3b3a%22 stop-opacity=%220%22/%3E%3C/radialGradient%3E %3C/defs%3E %3Cellipse cx=%22230%22 cy=%22430%22 rx=%22230%22 ry=%2246%22 fill=%22url(%23s3)%22/%3E %3Crect x=%2250%22 y=%22130%22 width=%22360%22 height=%22280%22 rx=%2228%22 fill=%22%23f2fffa%22/%3E %3Crect x=%2268%22 y=%22148%22 width=%22324%22 height=%2244%22 rx=%2218%22 fill=%22%23d3f1e5%22 opacity=%22.9%22/%3E %3Crect x=%2268%22 y=%22206%22 width=%22154%22 height=%22190%22 rx=%2222%22 fill=%22url(%23g)%22 opacity=%22.9%22/%3E %3Ccircle cx=%22145%22 cy=%22300%22 r=%2264%22 fill=%22url(%23s1)%22/%3E %3Crect x=%22236%22 y=%22206%22 width=%22156%22 height=%2288%22 rx=%2220%22 fill=%22%23c3ebdd%22/%3E %3Crect x=%22236%22 y=%22308%22 width=%22156%22 height=%2288%22 rx=%2220%22 fill=%22%23a99be8%22 opacity=%22.8%22/%3E %3Ccircle cx=%22314%22 cy=%22352%22 r=%2260%22 fill=%22url(%23s2)%22/%3E %3Crect x=%22348%22 y=%22214%22 width=%22204%22 height=%22372%22 rx=%2234%22 fill=%22%232c7f73%22 opacity=%22.18%22/%3E %3Crect x=%22340%22 y=%22200%22 width=%22200%22 height=%22370%22 rx=%2234%22 fill=%22%23f2fffa%22/%3E %3Crect x=%22358%22 y=%22222%22 width=%22164%22 height=%2236%22 rx=%2214%22 fill=%22%23d3f1e5%22/%3E %3Crect x=%22358%22 y=%22272%22 width=%22164%22 height=%22124%22 rx=%2222%22 fill=%22url(%23g)%22 opacity=%22.9%22/%3E %3Crect x=%22358%22 y=%22408%22 width=%2276%22 height=%2270%22 rx=%2218%22 fill=%22%23a99be8%22 opacity=%22.8%22/%3E %3Crect x=%22446%22 y=%22408%22 width=%2276%22 height=%2270%22 rx=%2218%22 fill=%22%23c3ebdd%22/%3E %3Crect x=%22358%22 y=%22492%22 width=%22164%22 height=%2250%22 rx=%2218%22 fill=%22%23d3f1e5%22/%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 65% 30%, #d6f7e8, transparent 70%), linear-gradient(160deg,#3fae82,#1d6f66)"></div>
           <span class="label">Masterarbeit</span>
           <div class="panel"><h3>Masterarbeit</h3><p class="role">B. Braun Aesculap · Medizintechnik</p>
             <p class="desc">Benutzeroberflächen für eine Ölspraystation und eine Service-App im Medizintechnik-Umfeld.</p>
@@ -319,7 +370,7 @@
             <p class="kpi">SUS-Score 81,5</p></div></div>
       </a>
       <a class="slot" href="#cookey" style="--i:2;--k:1" data-a="#b9a8f2" data-b="#f2b892" data-c="#7b61e8" data-year="2025">
-        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22food%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffb26b%22/%3E%3Cstop offset=%221%22 stop-color=%22%23ff6b4a%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22food2%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%239be3b0%22/%3E%3Cstop offset=%221%22 stop-color=%22%233fae82%22/%3E%3C/linearGradient%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2214%22 stdDeviation=%2216%22 flood-color=%22%232a1a6e%22 flood-opacity=%22.28%22/%3E%3C/filter%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2270%22 y=%2270%22 width=%22210%22 height=%22440%22 rx=%2234%22 fill=%22%23fbfaff%22/%3E %3Crect x=%2286%22 y=%2292%22 width=%2290%22 height=%2212%22 rx=%226%22 fill=%22%232a1f5c%22 opacity=%22.85%22/%3E %3Crect x=%2286%22 y=%22112%22 width=%22130%22 height=%228%22 rx=%224%22 fill=%22%237b61e8%22 opacity=%22.45%22/%3E %3Crect x=%2286%22 y=%22140%22 width=%22178%22 height=%22150%22 rx=%2222%22 fill=%22url(%23food)%22/%3E %3Ccircle cx=%22175%22 cy=%22215%22 r=%2252%22 fill=%22%23fff%22 opacity=%22.35%22/%3E%3Ccircle cx=%22175%22 cy=%22215%22 r=%2234%22 fill=%22%23fff%22 opacity=%22.55%22/%3E %3Crect x=%2286%22 y=%22306%22 width=%2260%22 height=%2220%22 rx=%2210%22 fill=%22%23e9e3ff%22/%3E%3Crect x=%22154%22 y=%22306%22 width=%2260%22 height=%2220%22 rx=%2210%22 fill=%22%23e9e3ff%22/%3E %3Crect x=%2286%22 y=%22342%22 width=%22178%22 height=%2250%22 rx=%2216%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E %3Ccircle cx=%22112%22 cy=%22367%22 r=%2214%22 fill=%22url(%23food2)%22/%3E%3Crect x=%22136%22 y=%22357%22 width=%2290%22 height=%229%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.7%22/%3E%3Crect x=%22136%22 y=%22372%22 width=%2260%22 height=%227%22 rx=%223%22 fill=%22%237b61e8%22 opacity=%22.4%22/%3E %3Crect x=%2286%22 y=%22402%22 width=%22178%22 height=%2250%22 rx=%2216%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E %3Ccircle cx=%22112%22 cy=%22427%22 r=%2214%22 fill=%22url(%23food)%22/%3E%3Crect x=%22136%22 y=%22417%22 width=%2280%22 height=%229%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.7%22/%3E%3Crect x=%22136%22 y=%22432%22 width=%2250%22 height=%227%22 rx=%223%22 fill=%22%237b61e8%22 opacity=%22.4%22/%3E %3Crect x=%2286%22 y=%22470%22 width=%22178%22 height=%2226%22 rx=%2213%22 fill=%22%237b61e8%22/%3E %3C/g%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%22320%22 y=%22120%22 width=%22210%22 height=%22440%22 rx=%2234%22 fill=%22%23fbfaff%22/%3E %3Crect x=%22336%22 y=%22142%22 width=%22110%22 height=%2212%22 rx=%226%22 fill=%22%232a1f5c%22 opacity=%22.85%22/%3E %3Cg transform=%22translate(336 176)%22%3E %3Crect width=%22178%22 height=%2240%22 rx=%2214%22 fill=%22%23efeaff%22/%3E%3Crect x=%2212%22 y=%2214%22 width=%2270%22 height=%229%22 rx=%224%22 fill=%22%237b61e8%22 opacity=%22.6%22/%3E %3Cg transform=%22translate(0 56)%22%3E%3Crect width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22url(%23food)%22/%3E%3Crect x=%2294%22 width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22url(%23food2)%22/%3E%3C/g%3E %3Cg transform=%22translate(0 152)%22%3E%3Crect width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22%23cbbdff%22/%3E%3Crect x=%2294%22 width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22%23ffd9b5%22/%3E%3C/g%3E %3Crect y=%22252%22 width=%22178%22 height=%2244%22 rx=%2214%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E%3Ccircle cx=%2224%22 cy=%22274%22 r=%2211%22 fill=%22%237b61e8%22 opacity=%22.7%22/%3E%3Crect x=%2244%22 y=%22266%22 width=%2284%22 height=%228%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.6%22/%3E %3C/g%3E %3Crect x=%22336%22 y=%22512%22 width=%22178%22 height=%2230%22 rx=%2215%22 fill=%22%232a1f5c%22/%3E %3C/g%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 70%, #e6deff, transparent 70%), linear-gradient(160deg,#7b61e8,#4a3aa6)"></div>
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22food%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffb26b%22/%3E%3Cstop offset=%221%22 stop-color=%22%23ff6b4a%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22food2%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%239be3b0%22/%3E%3Cstop offset=%221%22 stop-color=%22%233fae82%22/%3E%3C/linearGradient%3E %3C/defs%3E %3Crect x=%2264%22 y=%2290%22 width=%22222%22 height=%22452%22 rx=%2238%22 fill=%22%232a1a6e%22 opacity=%22.16%22/%3E %3Crect x=%2270%22 y=%2270%22 width=%22210%22 height=%22440%22 rx=%2234%22 fill=%22%23fbfaff%22/%3E %3Crect x=%2286%22 y=%2292%22 width=%2290%22 height=%2212%22 rx=%226%22 fill=%22%232a1f5c%22 opacity=%22.85%22/%3E %3Crect x=%2286%22 y=%22112%22 width=%22130%22 height=%228%22 rx=%224%22 fill=%22%237b61e8%22 opacity=%22.45%22/%3E %3Crect x=%2286%22 y=%22140%22 width=%22178%22 height=%22150%22 rx=%2222%22 fill=%22url(%23food)%22/%3E %3Ccircle cx=%22175%22 cy=%22215%22 r=%2252%22 fill=%22%23fff%22 opacity=%22.35%22/%3E%3Ccircle cx=%22175%22 cy=%22215%22 r=%2234%22 fill=%22%23fff%22 opacity=%22.55%22/%3E %3Crect x=%2286%22 y=%22306%22 width=%2260%22 height=%2220%22 rx=%2210%22 fill=%22%23e9e3ff%22/%3E%3Crect x=%22154%22 y=%22306%22 width=%2260%22 height=%2220%22 rx=%2210%22 fill=%22%23e9e3ff%22/%3E %3Crect x=%2286%22 y=%22342%22 width=%22178%22 height=%2250%22 rx=%2216%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E %3Ccircle cx=%22112%22 cy=%22367%22 r=%2214%22 fill=%22url(%23food2)%22/%3E%3Crect x=%22136%22 y=%22357%22 width=%2290%22 height=%229%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.7%22/%3E%3Crect x=%22136%22 y=%22372%22 width=%2260%22 height=%227%22 rx=%223%22 fill=%22%237b61e8%22 opacity=%22.4%22/%3E %3Crect x=%2286%22 y=%22402%22 width=%22178%22 height=%2250%22 rx=%2216%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E %3Ccircle cx=%22112%22 cy=%22427%22 r=%2214%22 fill=%22url(%23food)%22/%3E%3Crect x=%22136%22 y=%22417%22 width=%2280%22 height=%229%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.7%22/%3E%3Crect x=%22136%22 y=%22432%22 width=%2250%22 height=%227%22 rx=%223%22 fill=%22%237b61e8%22 opacity=%22.4%22/%3E %3Crect x=%2286%22 y=%22470%22 width=%22178%22 height=%2226%22 rx=%2213%22 fill=%22%237b61e8%22/%3E %3Crect x=%22314%22 y=%22140%22 width=%22222%22 height=%22452%22 rx=%2238%22 fill=%22%232a1a6e%22 opacity=%22.16%22/%3E %3Crect x=%22320%22 y=%22120%22 width=%22210%22 height=%22440%22 rx=%2234%22 fill=%22%23fbfaff%22/%3E %3Crect x=%22336%22 y=%22142%22 width=%22110%22 height=%2212%22 rx=%226%22 fill=%22%232a1f5c%22 opacity=%22.85%22/%3E %3Cg transform=%22translate(336 176)%22%3E %3Crect width=%22178%22 height=%2240%22 rx=%2214%22 fill=%22%23efeaff%22/%3E%3Crect x=%2212%22 y=%2214%22 width=%2270%22 height=%229%22 rx=%224%22 fill=%22%237b61e8%22 opacity=%22.6%22/%3E %3Cg transform=%22translate(0 56)%22%3E%3Crect width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22url(%23food)%22/%3E%3Crect x=%2294%22 width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22url(%23food2)%22/%3E%3C/g%3E %3Cg transform=%22translate(0 152)%22%3E%3Crect width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22%23cbbdff%22/%3E%3Crect x=%2294%22 width=%2284%22 height=%2284%22 rx=%2218%22 fill=%22%23ffd9b5%22/%3E%3C/g%3E %3Crect y=%22252%22 width=%22178%22 height=%2244%22 rx=%2214%22 fill=%22%23fff%22 stroke=%22%23e5e0f7%22/%3E%3Ccircle cx=%2224%22 cy=%22274%22 r=%2211%22 fill=%22%237b61e8%22 opacity=%22.7%22/%3E%3Crect x=%2244%22 y=%22266%22 width=%2284%22 height=%228%22 rx=%224%22 fill=%22%232a1f5c%22 opacity=%22.6%22/%3E %3C/g%3E %3Crect x=%22336%22 y=%22512%22 width=%22178%22 height=%2230%22 rx=%2215%22 fill=%22%232a1f5c%22/%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 70%, #e6deff, transparent 70%), linear-gradient(160deg,#7b61e8,#4a3aa6)"></div>
           <span class="label">Cookey</span>
           <div class="panel"><h3>Cookey</h3><p class="role">UI/UX Case Study · Konzept bis Prototyp</p>
             <p class="desc">Eine Essens-App, die Rezepte entdecken, planen und einkaufen in einem Ablauf verbindet.</p>
@@ -327,21 +378,23 @@
             <p class="kpi">10 Interviews · 5 Usability-Tests</p></div></div>
       </a>
       <a class="slot" href="#neuestes-projekt" style="--i:3;--k:0" data-a="#f2b8a6" data-b="#e6c4da" data-c="#c9787a" data-year="2026">
-        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22a%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffe3d8%22/%3E%3Cstop offset=%221%22 stop-color=%22%23f0a79b%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22b%22 x1=%220%22 y1=%221%22 x2=%221%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23d9a8e6%22/%3E%3Cstop offset=%221%22 stop-color=%22%23b0689a%22/%3E%3C/linearGradient%3E %3Cfilter id=%22sh%22 x=%22-20%%22 y=%22-20%%22 width=%22140%%22 height=%22140%%22%3E%3CfeDropShadow dx=%220%22 dy=%2214%22 stdDeviation=%2216%22 flood-color=%22%235a2a45%22 flood-opacity=%22.25%22/%3E%3C/filter%3E %3C/defs%3E %3Cg filter=%22url(%23sh)%22%3E %3Crect x=%2280%22 y=%22100%22 width=%22300%22 height=%22220%22 rx=%2230%22 fill=%22url(%23a)%22/%3E %3Ccircle cx=%22410%22 cy=%22190%22 r=%2286%22 fill=%22url(%23b)%22/%3E %3Crect x=%22150%22 y=%22300%22 width=%22330%22 height=%22170%22 rx=%2230%22 fill=%22%23fff%22 opacity=%22.9%22/%3E %3C/g%3E %3Crect x=%22176%22 y=%22328%22 width=%22150%22 height=%2214%22 rx=%227%22 fill=%22%23b0689a%22 opacity=%22.6%22/%3E %3Crect x=%22176%22 y=%22356%22 width=%22260%22 height=%2210%22 rx=%225%22 fill=%22%23b0689a%22 opacity=%22.25%22/%3E %3Crect x=%22176%22 y=%22378%22 width=%22220%22 height=%2210%22 rx=%225%22 fill=%22%23b0689a%22 opacity=%22.25%22/%3E %3Crect x=%22176%22 y=%22414%22 width=%2290%22 height=%2228%22 rx=%2214%22 fill=%22%23e59a86%22/%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 30%, #ffe3d8, transparent 70%), linear-gradient(160deg,#e59a86,#b0689a)"></div>
-          <span class="label">Neuestes Projekt</span>
+        <div class="card"><div class="art" style="--art: url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 600%22%3E %3Cdefs%3E %3ClinearGradient id=%22a%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffe3d8%22/%3E%3Cstop offset=%221%22 stop-color=%22%23f0a79b%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22b%22 x1=%220%22 y1=%221%22 x2=%221%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23d9a8e6%22/%3E%3Cstop offset=%221%22 stop-color=%22%23b0689a%22/%3E%3C/linearGradient%3E %3C/defs%3E %3Crect x=%2276%22 y=%22116%22 width=%22308%22 height=%22228%22 rx=%2232%22 fill=%22%235a2a45%22 opacity=%22.16%22/%3E %3Crect x=%2280%22 y=%22100%22 width=%22300%22 height=%22220%22 rx=%2230%22 fill=%22url(%23a)%22/%3E %3Ccircle cx=%22410%22 cy=%22204%22 r=%2288%22 fill=%22%235a2a45%22 opacity=%22.14%22/%3E %3Ccircle cx=%22410%22 cy=%22190%22 r=%2286%22 fill=%22url(%23b)%22/%3E %3Crect x=%22146%22 y=%22316%22 width=%22338%22 height=%22178%22 rx=%2232%22 fill=%22%235a2a45%22 opacity=%22.16%22/%3E %3Crect x=%22150%22 y=%22300%22 width=%22330%22 height=%22170%22 rx=%2230%22 fill=%22%23fff%22 opacity=%22.92%22/%3E %3Crect x=%22176%22 y=%22328%22 width=%22150%22 height=%2214%22 rx=%227%22 fill=%22%23b0689a%22 opacity=%22.6%22/%3E %3Crect x=%22176%22 y=%22356%22 width=%22260%22 height=%2210%22 rx=%225%22 fill=%22%23b0689a%22 opacity=%22.25%22/%3E %3Crect x=%22176%22 y=%22378%22 width=%22220%22 height=%2210%22 rx=%225%22 fill=%22%23b0689a%22 opacity=%22.25%22/%3E %3Crect x=%22176%22 y=%22414%22 width=%2290%22 height=%2228%22 rx=%2214%22 fill=%22%23e59a86%22/%3E %3C/svg%3E') center / cover no-repeat, radial-gradient(70% 60% at 30% 30%, #ffe3d8, transparent 70%), linear-gradient(160deg,#e59a86,#b0689a)"></div>
           <div class="panel"><h3>Neuestes Projekt</h3><p class="role">Details folgen</p>
             <p class="desc">Platzhalter für dein aktuelles Projekt. Titel, Rolle und Ergebnis ergänze ich, sobald du sie hast.</p>
             <div class="tags"><span>UX</span><span>UI</span></div></div></div>
       </a>
     </div>
-    <div class="layer floor" id="floor"></div>
     <div class="layer zones" id="zones"></div>
   </div>
 </main>
 
 <script>
-  const slots = [...document.querySelectorAll('#cards .slot')];
+  const cardsLayer = document.getElementById('cards');
   const zonesLayer = document.getElementById('zones');
+  const stackEl = document.getElementById('stack');
+  let slots = [], zones = [], walls = [], S = [];             // werden von buildStack() gefüllt
+  // Vorlagen: die vier echten Projekte (hinten -> vorn). Weitere Karten sind Platzhalter, die hinten dazukommen.
+  const REAL = [...cardsLayer.querySelectorAll('.slot')].map(el => el.cloneNode(true));
   const bg    = document.getElementById('bg');
   const label = document.getElementById('cursorLabel');
 
@@ -355,33 +408,7 @@
   const K_COLOR        = 3.2; // Tempo des Farbwechsels
   const LABEL_AT       = 0.97;// Cursor-Label erst ab diesem Öffnungsgrad
 
-  /* ---- Trefferflächen: eine pro Karte, an der festen Ruheposition ---- */
-  const zones = slots.map((slot, i) => {
-    const z = document.createElement('div');
-    z.className = 'zone';
-    z.dataset.i = i;
-    z.setAttribute('aria-hidden', 'true');
-    z.style.cssText = slot.getAttribute('style');          // übernimmt --i und --k
-    z.addEventListener('click', () => slot.click());
-    zonesLayer.appendChild(z);
-    return z;
-  });
-
-  /* ---- Jahreszahlen auf dem "Boden": eine pro Karte, sichtbar nur bei Hover ---- */
-  const floorLayer = document.getElementById('floor');
-  const nums = slots.map((slot, i) => {
-    const n = document.createElement('div');
-    n.className = 'floor-num';
-    n.style.cssText = slot.getAttribute('style');          // übernimmt --i und --k
-    n.style.setProperty('--c', slot.dataset.c || '#1b1f27');
-    n.setAttribute('aria-hidden', 'true');
-    n.innerHTML = '<span>' + (slot.dataset.year || '') + '</span>';
-    floorLayer.appendChild(n);
-    return n;
-  });
-
   /* ---- Zustand: alles nähert sich einem Ziel an (kein Springen) ---- */
-  const S = slots.map(() => ({ lift: 0, open: 0, liftT: 0, openT: 0, num: 0 }));
   let hovered = -1, openTimer = null;
 
   const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
@@ -419,7 +446,110 @@
     label.classList.remove('show');
   }
 
-  slots.forEach((slot, i) => slot.addEventListener('focus', () => enter(i)));
+  /* =====================================================================
+     Stapel aufbauen (Anzahl der Projekte einstellbar, siehe Admin-Menü oben rechts)
+     ===================================================================== */
+  // Abstände und Kartengröße je Anzahl: mehr Karten = kleiner und enger gestaffelt
+  const LAYOUT = {
+    4:  { sc: 1,   fdx: .21,  fdy: .11,  fdz: .47 },
+    5:  { sc: .95, fdx: .19,  fdy: .10,  fdz: .42 },   // ab 5 Karten werden fdx/fdy/fdz aus dem verfügbaren Platz berechnet
+    10: { sc: .8,  fdx: .12,  fdy: .065, fdz: .24 },
+    15: { sc: .7,  fdx: .085, fdy: .05,  fdz: .17 }
+  };
+  let curN = 4;
+  function applyLayout(n) {
+    curN = n;
+    const L = LAYOUT[n] || LAYOUT[4];
+    let { fdx, fdy, fdz } = L;
+    if (n > 4) {
+      // Mehr Karten sollen mehr Platz einnehmen, wenn er da ist: Abstände wachsen, bis der Stapel das Fenster füllt
+      const w = Math.min(300, Math.max(150, innerWidth * .22)) * L.sc;     // Kartenbreite in px
+      const lift = .46 * w;
+      const AW = Math.max(1.2 * w, innerWidth - 2.3 * w);                   // Breite; links bleibt Platz fürs Aufweiten der Karten
+      const AH = Math.max(w, innerHeight - 160);                            // Höhe abzüglich Taskbar und Rand
+      fdx = Math.max(.03, Math.min(.38, (AW - w) / ((n - 1) * w)));
+      fdy = Math.max(.02, Math.min(.19, (AH - w - lift) / ((n - 1) * w)));
+      fdz = Math.min(.47, 700 / ((n - 1) * w));                             // Gesamttiefe begrenzen
+    }
+    const root = document.documentElement.style;
+    root.setProperty('--n', n); root.setProperty('--sc', L.sc);
+    root.setProperty('--fdx', fdx.toFixed(4)); root.setProperty('--fdy', fdy.toFixed(4)); root.setProperty('--fdz', fdz.toFixed(4));
+  }
+  window.addEventListener('resize', () => applyLayout(curN));
+
+  function makePlaceholder(j, extra) {
+    const el = REAL[j % 3].cloneNode(true);                  // Farben/Bild der echten Projekte durchreihen
+    const num = j + 1, year = 2021 - (extra - 1 - j);        // älter = weiter hinten (Platzhalter)
+    el.setAttribute('href', '#projekt-' + (100 + num));
+    el.dataset.year = String(year);
+    const q = sel => el.querySelector(sel);
+    q('.label').textContent = 'Projekt ' + num;
+    q('h3').textContent = 'Projekt ' + num;
+    q('.role').textContent = 'Platzhalter · Rolle';
+    q('.desc').textContent = 'Platzhalter für ein weiteres Projekt. Titel und Inhalte folgen.';
+    q('.tags').innerHTML = '<span>UX</span><span>UI</span>';
+    const kpi = q('.kpi'); if (kpi) kpi.remove();
+    return el;
+  }
+
+  function buildStack(n) {
+    if (active >= 0 || busy) return;
+    leaveAll();
+    applyLayout(n);
+    document.body.classList.toggle('dense', n >= 8);
+
+    cardsLayer.innerHTML = ''; zonesLayer.innerHTML = ''; walls = [];
+    const extra = n - REAL.length, list = [];
+    for (let j = 0; j < extra; j++) list.push(makePlaceholder(j, extra));
+    REAL.forEach(r => list.push(r.cloneNode(true)));
+
+    list.forEach((el, i) => {
+      el.setAttribute('style', `--i:${i};--k:${n - 1 - i}`);
+      const y = document.createElement('div');                // Jahreszahl auf der hinteren Wand (eine pro Karte, nur eine sichtbar)
+      y.className = 'wall-year'; y.setAttribute('aria-hidden', 'true'); y.textContent = el.dataset.year || '';
+      if (el.dataset.c) y.style.color = el.dataset.c;           // Farbe der jeweiligen Karte
+      cardsLayer.appendChild(y); walls.push(y);
+      cardsLayer.appendChild(el);
+    });
+    slots = [...cardsLayer.querySelectorAll('.slot')];
+    S = slots.map(() => ({ lift: 0, open: 0, liftT: 0, openT: 0, num: 0 }));
+
+    // Trefferflächen: eine pro Karte, an der festen Ruheposition
+    zones = slots.map((slot, i) => {
+      const z = document.createElement('div');
+      z.className = 'zone'; z.dataset.i = i; z.setAttribute('aria-hidden', 'true');
+      z.style.cssText = slot.getAttribute('style');           // übernimmt --i und --k
+      z.addEventListener('click', () => slot.click());
+      zonesLayer.appendChild(z);
+      return z;
+    });
+
+    slots.forEach((slot, i) => {
+      slot.addEventListener('focus', () => enter(i));
+      // Klick: Maus öffnet direkt die Case Study. Handy: erster Tipp öffnet die Karte, zweiter die Case Study
+      slot.addEventListener('click', e => {
+        e.preventDefault();
+        if (!matchMedia('(hover: hover)').matches && S[i].openT < 1) { hovered = -1; enter(i); S[i].openT = 1; return; }
+        openProject(i);
+      });
+    });
+    try { stackEl.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: 'ease-out' }); } catch (e) {}
+  }
+
+  /* ---- Admin-Menü (oben rechts): Anzahl der angezeigten Projekte ---- */
+  const adminBtn = document.getElementById('adminBtn'), adminPanel = document.getElementById('adminPanel');
+  function markCount(n) { adminPanel.querySelectorAll('[data-n]').forEach(b => b.classList.toggle('on', +b.dataset.n === n)); }
+  adminBtn.addEventListener('click', () => {
+    const open = adminPanel.hidden;
+    adminPanel.hidden = !open; adminBtn.setAttribute('aria-expanded', String(open));
+  });
+  adminPanel.addEventListener('click', e => {
+    const b = e.target.closest('[data-n]'); if (!b) return;
+    const n = +b.dataset.n;
+    buildStack(n); markCount(n);
+    try { localStorage.setItem('projektAnzahl', n); } catch (err) {}
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#admin')) { adminPanel.hidden = true; adminBtn.setAttribute('aria-expanded', 'false'); } });
 
   /* ---- Maus: Trefferfläche bestimmt die Karte. Außerhalb aller Flächen bleibt die angewählte
           Karte nur aktiv, solange der Zeiger auf ihr selbst ist (ihr "herausgefahrener" Teil). ---- */
@@ -440,19 +570,6 @@
     label.classList.toggle('show', overOpenCard && S[hovered].open >= LABEL_AT);
   });
   document.documentElement.addEventListener('pointerleave', () => { if (active >= 0) return; overOpenCard = false; leaveAll(); });
-
-  /* ---- Klick: Maus öffnet direkt die Case Study. Handy: erster Tipp öffnet die Karte, zweiter die Case Study ---- */
-  slots.forEach((slot, i) => {
-    slot.addEventListener('click', e => {
-      e.preventDefault();
-      if (!matchMedia('(hover: hover)').matches && S[i].openT < 1) {
-        hovered = -1; enter(i);
-        S[i].openT = 1;
-        return;
-      }
-      openProject(i);
-    });
-  });
 
   /* =====================================================================
      Übergang: Karte -> Vollbild-Hero und zurück
@@ -572,9 +689,9 @@
   }
 
   const fullFrame = () => ({ left: '0px', top: '0px', width: px(innerWidth), height: px(innerHeight), borderRadius: '0px',
-    transform: poseTransform(0, 1), backdropFilter: 'blur(0px) saturate(100%)' });
+    transform: poseTransform(0, 1) });
   const boxFrame = (b, ry) => ({ left: px(b.left), top: px(b.top), width: px(b.width), height: px(b.height), borderRadius: '22px',
-    transform: poseTransform(ry, SC), backdropFilter: 'blur(18px) saturate(150%)' });
+    transform: poseTransform(ry, SC) });
 
   /* ---------------- Öffnen ---------------- */
   function openProject(i) {
@@ -645,7 +762,8 @@
     hovered = i; slots.forEach((s, j) => s.classList.toggle('hov', j === i));
     updateTargets();
     S.forEach((s, j) => { s.lift = s.liftT; s.open = s.openT = (j === i ? 1 : 0);
-      slots[j].style.setProperty('--lift', s.lift.toFixed(4)); slots[j].style.setProperty('--open', s.open.toFixed(4)); });
+      slots[j].style.setProperty('--lift', s.lift.toFixed(4)); slots[j].style.setProperty('--open', s.open.toFixed(4));
+      slots[j]._v = null; });                            // Zwischenspeicher der Schleife zurücksetzen
     card.getAnimations().forEach(a => a.cancel());
     const ty = new DOMMatrix(getComputedStyle(card).transform).m42;
     const away = `translate(${-1.15 * w}px, ${ty - 0.28 * w}px) scale(${SC})`;
@@ -719,20 +837,29 @@
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
 
+    // Werte werden nur dann ins CSS geschrieben, wenn sie sich wirklich ändern.
+    // Im Ruhezustand passiert dadurch nichts mehr (kein dauerndes Neuzeichnen).
+    const put = (el, key, v) => { const c = el._v || (el._v = {}); if (c[key] !== v) { c[key] = v; el.style.setProperty(key, v); } };
+    const snap = (cur, target) => Math.abs(cur - target) < 0.0005 ? target : cur;
+
     S.forEach((s, i) => {
-      s.lift = approach(s.lift, s.liftT, i === hovered ? K_LIFT_HOVERED : K_LIFT_OTHERS, dt);
-      s.open = approach(s.open, s.openT, K_OPEN, dt);
-      if (Math.abs(s.open - s.openT) < 0.0005) s.open = s.openT;
-      slots[i].style.setProperty('--lift', s.lift.toFixed(4));
-      slots[i].style.setProperty('--open', s.open.toFixed(4));
-      // Jahreszahl: nur unter der angewählten Karte, nicht während Case Study / Übergang
-      s.num = approach(s.num, (i === hovered && active < 0) ? 1 : 0, 5, dt);
-      nums[i].style.setProperty('--num', s.num.toFixed(3));
+      s.lift = snap(approach(s.lift, s.liftT, i === hovered ? K_LIFT_HOVERED : K_LIFT_OTHERS, dt), s.liftT);
+      s.open = snap(approach(s.open, s.openT, K_OPEN, dt), s.openT);
+      put(slots[i], '--lift', s.lift.toFixed(4));
+      put(slots[i], '--open', s.open.toFixed(4));
+      // Jahreszahl auf der Wand, nicht während Case Study / Übergang
+      // erscheint verzögert: erst wenn die Karte (fast) fertig ausgefahren ist
+      const numT = (i === hovered && active < 0 && s.open > .9) ? 1 : 0;
+      s.num = snap(approach(s.num, numT, 2.6, dt), numT);
+      put(walls[i], '--num', s.num.toFixed(3));
     });
 
     for (const k of ['a', 'b']) {
-      for (let c = 0; c < 3; c++) color[k][c] = approach(color[k][c], colorT[k][c], K_COLOR, dt);
-      bg.style.setProperty('--theme-' + k, `rgb(${color[k].map(Math.round).join(',')})`);
+      for (let c = 0; c < 3; c++) {
+        color[k][c] = approach(color[k][c], colorT[k][c], K_COLOR, dt);
+        if (Math.abs(color[k][c] - colorT[k][c]) < 0.4) color[k][c] = colorT[k][c];
+      }
+      put(bg, '--theme-' + k, `rgb(${color[k].map(Math.round).join(',')})`);
     }
 
     // Label erscheint, sobald die Karte voll ausgefahren ist (auch ohne Mausbewegung)
@@ -740,6 +867,9 @@
 
     requestAnimationFrame(frame);
   }
+  let startN = 4;
+  try { const v = +localStorage.getItem('projektAnzahl'); if (LAYOUT[v]) startN = v; } catch (e) {}
+  buildStack(startN); markCount(startN);
   requestAnimationFrame(frame);
 </script>
 </body>
