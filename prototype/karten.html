@@ -297,6 +297,95 @@
   .hero-back { opacity: 0; transition: opacity .45s ease, background .25s ease; }
   .hero.ready .hero-back { opacity: 1; }
 
+
+  /* ---------- Case-Study-Seite (scrollt über den Hero) ---------- */
+  .case {
+    --accent: #2f6fb5;
+    position: fixed; inset: 0; z-index: 95; display: none;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  .case.on { display: block; }
+  .case-spacer { height: 100vh; height: 100svh; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 22px; pointer-events: none; }
+  .case-cue { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; opacity: .6; animation: cue 2.2s ease-in-out infinite; }
+  @keyframes cue { 50% { transform: translateY(6px); opacity: .9; } }
+  .case-back {
+    position: fixed; top: 86px; left: var(--hp, 48px); z-index: 99; opacity: 0; pointer-events: none;
+    padding: 9px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.95);
+    background: rgba(255,255,255,.78); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: opacity .45s ease, background .25s ease;
+  }
+  .case.on .case-back { opacity: 1; pointer-events: auto; }
+  .case-back:hover { background: #fff; }
+
+  .case-body { background: #f7f6f3; color: var(--ink); border-radius: 28px 28px 0 0; box-shadow: 0 -20px 60px rgba(27,31,39,.14); }
+  .c-wrap { width: min(1080px, 100% - 2 * clamp(20px, 6vw, 64px)); margin: 0 auto; }
+  .c-sec { padding: clamp(56px, 9vw, 112px) 0 0; }
+  .c-eyebrow { font-size: 12.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  .c-h2 { font-size: clamp(26px, 3.6vw, 42px); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; max-width: 22ch; }
+  .c-h3 { font-size: clamp(19px, 2vw, 24px); font-weight: 600; letter-spacing: -.01em; margin-bottom: 10px; }
+  .c-lead { font-size: clamp(17px, 1.7vw, 21px); line-height: 1.55; max-width: 62ch; opacity: .85; margin-top: 20px; }
+  .c-p { font-size: 16.5px; line-height: 1.65; max-width: 62ch; opacity: .82; }
+  .c-p + .c-p { margin-top: 14px; }
+  .c-list { list-style: none; padding: 0; display: grid; gap: 10px; max-width: 62ch; }
+  .c-list li { position: relative; padding-left: 22px; font-size: 16px; line-height: 1.55; opacity: .85; }
+  .c-list li::before { content: ""; position: absolute; left: 0; top: .6em; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  .c-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 28px 32px; padding: clamp(32px, 5vw, 56px) 0; border-bottom: 1px solid rgba(27,31,39,.12); }
+  .c-meta dt { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; opacity: .5; margin-bottom: 6px; }
+  .c-meta dd { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 500; }
+
+  .c-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: clamp(28px, 6vw, 88px); align-items: start; }
+  .c-card { background: #fff; border: 1px solid rgba(27,31,39,.08); border-radius: 20px; padding: clamp(22px, 3vw, 36px); }
+
+  .c-video { display: flex; align-items: center; gap: 18px; margin-top: clamp(32px, 5vw, 56px); padding: 20px 24px; border-radius: 20px; text-decoration: none; color: inherit;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, #fff), #fff); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); transition: transform .25s ease, box-shadow .25s ease; }
+  .c-video:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(27,31,39,.12); }
+  .c-play { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; }
+  .c-play::before { content: ""; margin-left: 4px; border-style: solid; border-width: 9px 0 9px 15px; border-color: transparent transparent transparent #fff; }
+  .c-video strong { display: block; font-size: 17px; }
+  .c-video span { font-size: 14px; opacity: .65; }
+
+  .c-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin-top: 36px; counter-reset: st; }
+  .c-step { counter-increment: st; }
+  .c-step::before { content: counter(st, decimal-leading-zero); display: block; font-size: 13px; font-weight: 600; color: var(--accent); letter-spacing: .08em; margin-bottom: 14px; }
+  .c-step h3 { font-size: 19px; margin-bottom: 8px; }
+  .c-step p, .c-step li { font-size: 15px; line-height: 1.55; opacity: .82; }
+  .c-step ul { list-style: none; padding: 0; display: grid; gap: 4px; }
+
+  .c-screen { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(24px, 5vw, 72px); align-items: center; padding: clamp(36px, 6vw, 72px) 0; border-top: 1px solid rgba(27,31,39,.1); }
+  .c-screen:nth-of-type(even) .c-shot { order: 2; }
+  .c-screens { margin-top: clamp(28px, 4vw, 48px); }
+  .c-screen .c-num { font-size: 13px; font-weight: 600; color: var(--accent); letter-spacing: .08em; margin-bottom: 10px; }
+  .c-screen .c-p { font-size: 15.5px; }
+  .c-feat { margin-top: 16px; display: grid; gap: 8px; }
+  .c-feat div { font-size: 14.5px; line-height: 1.5; opacity: .85; padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+  .c-feat b { font-weight: 600; }
+
+  .c-shot { margin: 0; }
+  .c-shot .frame { position: relative; aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; background: #e7e4dd; border: 1px solid rgba(27,31,39,.1); box-shadow: 0 18px 44px rgba(27,31,39,.12); }
+  .c-shot.tall .frame { aspect-ratio: 4 / 3; }
+  .c-shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .c-shot .frame.missing { background: repeating-linear-gradient(135deg, #ebe8e1 0 14px, #e3e0d8 14px 28px); display: grid; place-items: center; }
+  .c-shot .frame.missing img { display: none; }
+  .c-shot .frame.missing::after { content: "Mockup aus Figma – Bild folgt"; font-size: 13px; opacity: .55; text-align: center; padding: 0 16px; }
+  .c-shot figcaption { margin-top: 10px; font-size: 13px; opacity: .6; }
+
+  .c-learn { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 32px; }
+  .c-learn .c-card p { font-size: 15.5px; line-height: 1.55; }
+  .c-learn .c-card::before { content: ""; display: block; width: 28px; height: 3px; border-radius: 2px; background: var(--accent); margin-bottom: 14px; }
+
+  .c-end { margin-top: clamp(64px, 10vw, 120px); padding: clamp(48px, 7vw, 88px) 0 clamp(56px, 8vw, 96px); text-align: center; border-top: 1px solid rgba(27,31,39,.12); }
+  .c-end p { font-size: 14px; opacity: .55; margin-bottom: 14px; }
+  .c-btn { display: inline-block; padding: 13px 26px; border-radius: 999px; background: var(--ink); color: #fff; border: 0; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
+  .c-btn:hover { background: var(--accent); }
+
+  @media (max-width: 820px) {
+    .c-two, .c-screen { grid-template-columns: minmax(0, 1fr); }
+    .c-screen:nth-of-type(even) .c-shot { order: 0; }
+    .case-back { top: 74px; }
+  }
+
   /* ---------- Handy ---------- */
   @media (max-width: 700px) {
     :root { --open-extra: 0.9; --ry: 16deg; --ry-open: 0deg; --zm: 1.57; }
@@ -345,8 +434,180 @@
   <p class="hero-desc" id="heroDesc"></p>
   <div class="tags" id="heroTags"></div>
   <p class="hero-kpi" id="heroKpi"></p>
-  <p class="hero-note">Platzhalter · hier beginnt später die Case Study</p>
+  <p class="hero-note" id="heroNote">Platzhalter · hier beginnt später die Case Study</p>
 </section>
+
+
+<!-- Case Study Bachelorarbeit (Inhalt aus der Figma-Datei) -->
+<div class="case" id="case" aria-label="Case Study Bachelorarbeit">
+  <button class="case-back" id="caseBack" type="button">← Alle Projekte</button>
+  <div class="case-spacer"><span class="case-cue">Scrollen ↓</span></div>
+  <article class="case-body" id="caseBody"></article>
+</div>
+
+<template id="case-bachelorarbeit">
+  <div class="c-wrap">
+    <dl class="c-meta">
+      <div><dt>Projekt</dt><dd>Bachelorarbeit</dd></div>
+      <div><dt>Auftraggeber</dt><dd>Star Micronics</dd></div>
+      <div><dt>Jahr</dt><dd>2022</dd></div>
+      <div><dt>Umfang</dt><dd>UI-Konzept, Mockups, Umsetzung</dd></div>
+      <div><dt>Tools</dt><dd>Qt Creator, C++</dd></div>
+    </dl>
+
+    <section class="c-sec">
+      <div class="c-two">
+        <div>
+          <p class="c-eyebrow">Aufgabe und Ziel</p>
+          <h2 class="c-h2">Werkzeuge im Blick, bevor etwas bricht.</h2>
+        </div>
+        <div>
+          <p class="c-p">Für die Firma Star Micronics sollte eine moderne und intuitive Benutzeroberfläche zur Werkzeugüberwachung im Fertigungsprozess entwickelt werden. Die Bediener sollen den Zustand aller Werkzeuge in Echtzeit überwachen, Grenzwerte und Belastungen einsehen sowie frühzeitig auf Verschleiß reagieren können.</p>
+          <p class="c-p">Komplexe Maschinendaten werden dabei übersichtlich und leicht verständlich visualisiert. Kritische Informationen wie Verschleiß oder Bruchgefahr werden sofort sichtbar, um Sicherheit, Effizienz und Qualität in der Fertigung zu gewährleisten.</p>
+        </div>
+      </div>
+      <a class="c-video" href="https://www.youtube.com/watch?v=4AGchRg4UK4&amp;t=1s" target="_blank" rel="noopener">
+        <span class="c-play" aria-hidden="true"></span>
+        <div><strong>Video zum fertigen Produkt ansehen</strong><span>Öffnet YouTube in einem neuen Tab</span></div>
+      </a>
+    </section>
+
+    <section class="c-sec">
+      <div class="c-two">
+        <div>
+          <p class="c-eyebrow">Herausforderungen</p>
+          <h2 class="c-h2">Was die Oberfläche leisten muss</h2>
+        </div>
+        <ul class="c-list">
+          <li>Maschinendaten übersichtlich und verständlich visualisieren.</li>
+          <li>Kritische Informationen wie Verschleiß oder Bruchgefahr in Echtzeit darstellen.</li>
+          <li>Oberfläche intuitiv und leicht bedienbar gestalten.</li>
+          <li>Sicherheit und Effizienz im Fertigungsprozess gewährleisten.</li>
+          <li>Anschließend die interaktive UI technisch mit Qt Creator in C++ umsetzen.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="c-sec">
+      <p class="c-eyebrow">Vorgehen</p>
+      <h2 class="c-h2">Von den Anforderungen zur lauffähigen Anwendung</h2>
+      <p class="c-lead">Zuerst wurden die Anforderungen erfasst. Auf dieser Basis entstanden Mockups, die im Team mit verschiedenen Fachleuten besprochen und angepasst wurden.</p>
+      <div class="c-steps">
+        <div class="c-step"><h3>Anforderungen</h3>
+          <p>Zusammengestellt aus mehreren Quellen, damit die UI praxisnah und benutzerfreundlich wird:</p>
+          <ul><li>Expertenwissen der Fachleute</li><li>Anforderungen von Maschinenbedienern</li><li>Designrichtlinien für Benutzeroberflächen</li><li>Vorgegebene Projektziele</li></ul></div>
+        <div class="c-step"><h3>Mockups</h3>
+          <p>Aus den abgeleiteten Anforderungen entstanden Mockups für alle Bildschirme. Sie wurden im Team mit Fachleuten besprochen und überarbeitet.</p></div>
+        <div class="c-step"><h3>Umsetzung</h3>
+          <p>Die gestaltete Oberfläche wurde mit Qt Creator und C++ programmiert, von der Navigation bis zu den Live-Graphen im Monitoring.</p></div>
+      </div>
+    </section>
+
+    <section class="c-sec">
+      <p class="c-eyebrow">Die Lösung</p>
+      <h2 class="c-h2">Fünf Bildschirme, eine durchgängige Navigation</h2>
+      <p class="c-lead">Eine Taskleiste am linken Rand führt durch alle Bildschirme. Die Buttons sind durch definierte Icons klar unterscheidbar.</p>
+
+      <div class="c-screens">
+        <div class="c-screen">
+          <div>
+            <p class="c-num">01</p>
+            <h3 class="c-h3">Werkzeugübersicht</h3>
+            <p class="c-p">Der Verwaltungsbildschirm für die Werkzeuge einer Maschine. Hier sind verschiedene Werte zu den jeweiligen Werkzeugen einstellbar.</p>
+            <div class="c-feat">
+              <div><b>Taskleiste:</b> Back-Button oben (zurück zur zuletzt verwendeten Seite), darunter Home, Werkzeugübersicht, Multimonitoring und ggf. das einzelne Monitoring. Dazu Funktionen zum Löschen aller Werkzeugleisten, Teach-In (Aufzeichnung der Achsenbelastung), Speichern und Hochladen.</div>
+              <div><b>Werkzeugleisten:</b> Jede Leiste steht für ein Werkzeug, mit Auswahl von Werkzeug und Achse, Grenzwerten, aktuellem Bearbeitungsschritt, aktiven Prozessen und Schwesternwerkzeug-Status. Buttons führen zu Monitoring und Bearbeitung, ein weiterer löscht die Leiste.</div>
+            </div>
+          </div>
+          <figure class="c-shot"><div class="frame"><img src="assets/bachelorarbeit/uebersicht.png" alt="Mockup der Werkzeugübersicht" loading="lazy"></div><figcaption>Mockup der Werkzeugübersicht</figcaption></figure>
+        </div>
+
+        <div class="c-screen">
+          <div>
+            <p class="c-num">02</p>
+            <h3 class="c-h3">Werkzeug-Monitoring</h3>
+            <p class="c-p">Die Live-Ansicht für ein einzelnes Werkzeug.</p>
+            <div class="c-feat">
+              <div><b>Diagramm-Anzeige:</b> Grenzwerte und Schnittkraft der ausgewählten Achse, mit Screenshot des aktuellen Kurvenverlaufs.</div>
+              <div><b>Informationsleiste:</b> Grenzwerte, Bearbeitungsschritt, ausgewähltes Werkzeug und Achsenname.</div>
+              <div><b>Werteanzeige:</b> Grenzwerte in Prozent, Ist-Wert und Referenzwert sowie aktive Prozesse und Schwesternwerkzeug-Status.</div>
+            </div>
+          </div>
+          <figure class="c-shot"><div class="frame"><img src="assets/bachelorarbeit/monitoring.png" alt="Mockup des Werkzeugmonitorings" loading="lazy"></div><figcaption>Mockup des Werkzeugmonitorings</figcaption></figure>
+        </div>
+
+        <div class="c-screen">
+          <div>
+            <p class="c-num">03</p>
+            <h3 class="c-h3">Bearbeitungsansicht</h3>
+            <p class="c-p">Für jedes Werkzeug gibt es befüllbare Eingabemasken. Ein gekennzeichnetes Bedienfeld in den Werkzeugleisten führt dorthin.</p>
+            <div class="c-feat">
+              <div><b>Werkzeuginformationen:</b> Name des Schwesternwerkzeugs, Werkzeugstückzahl und Maschinencode (M-Code).</div>
+              <div><b>M-Code-Auswahl:</b> Toggle-Button für einen der 15 M-Codes, die Teilschritte des NC-Programms darstellen. Gekennzeichnet ist, ob ein Code schon benutzt oder noch zuweisbar ist. Daneben werden Station und Bearbeitungsschritt angezeigt.</div>
+            </div>
+          </div>
+          <figure class="c-shot"><div class="frame"><img src="assets/bachelorarbeit/bearbeiten.png" alt="Mockup der Bearbeitungsansicht" loading="lazy"></div><figcaption>Mockup der Bearbeitungsansicht</figcaption></figure>
+        </div>
+
+        <div class="c-screen">
+          <div>
+            <p class="c-num">04</p>
+            <h3 class="c-h3">Multimonitoring</h3>
+            <p class="c-p">Eine Übersicht, um mehrere Achsen eines Werkzeugs oder verschiedene Werkzeuge gleichzeitig zu überwachen.</p>
+            <div class="c-feat">
+              <div><b>Vier Diagramme:</b> Für jedes lässt sich wählen, welche Achse welches Werkzeugs aus welchem Kanal angezeigt wird.</div>
+              <div><b>Live-Daten:</b> Anzeige von Live-Daten und Grenzwerten für einen bestimmten Bearbeitungsschritt, Auswahl per Drop-down für Kanal, Werkzeug und Achse.</div>
+            </div>
+          </div>
+          <figure class="c-shot"><div class="frame"><img src="assets/bachelorarbeit/multimonitoring.png" alt="Mockup des Multimonitorings" loading="lazy"></div><figcaption>Mockup des Multimonitorings</figcaption></figure>
+        </div>
+
+        <div class="c-screen">
+          <div>
+            <p class="c-num">05</p>
+            <h3 class="c-h3">Grundeinstellungen</h3>
+            <div class="c-feat">
+              <div><b>Stoppbedingungen:</b> Drei Optionen, wenn der Istwert die Grenzwerte überschreitet. Alarm mit M xx (Stopp und Alarm erst am Ende des NC-Programm-Zyklus), Stopp bei M15 (Stopp und Alarm beim Erreichen von M15) oder Sofort-Stopp mit Alarm.</div>
+              <div><b>Teachen:</b> Die Anzahl der Teach-Zyklen ist wählbar. Mehr Zyklen ergeben eine genauere Belastungskurve, brauchen aber mehr Zeit.</div>
+              <div><b>Speicheroptionen:</b> Automatisches Speichern der Werkzeugleisten und einstellbare Reichweite der Speicherhistorie.</div>
+            </div>
+          </div>
+          <figure class="c-shot"><div class="frame"><img src="assets/bachelorarbeit/einstellungen.png" alt="Mockup der Grundeinstellungen" loading="lazy"></div><figcaption>Mockup der Grundeinstellungen</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="c-sec">
+      <div class="c-two">
+        <div>
+          <p class="c-eyebrow">Technische Umsetzung</p>
+          <h2 class="c-h2">Qt Creator und C++</h2>
+        </div>
+        <div>
+          <p class="c-p">Zur Umsetzung der gestalteten Oberfläche wurde Qt Creator verwendet, eine auf C++ basierende Entwicklungsumgebung, mit der Oberflächen gestaltet und programmiert werden.</p>
+          <p class="c-p">Das Tool bietet Oberflächenelemente in Form von Widgets, die sich beliebig anpassen lassen. Von der Navigation bis zu den Live-Graphen im Monitoring wurden die Funktionen programmiert.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="c-sec">
+      <p class="c-eyebrow">Learnings und Ausblick</p>
+      <h2 class="c-h2">Der erste praktische Einblick in ein HMI im Industrieumfeld</h2>
+      <div class="c-learn">
+        <div class="c-card"><p>Der Gestaltungsprozess basierte nur auf Anforderungen, Rahmenbedingungen und dem Expertenwissen der Fachleute.</p></div>
+        <div class="c-card"><p>Usability-Tests, Personas und User Flows würden den Entwicklungsprozess noch verbessern.</p></div>
+        <div class="c-card"><p>Praktische Erfahrung mit Qt und C++, von der Konzeption bis zur lauffähigen Anwendung.</p></div>
+        <div class="c-card"><p>Klare Anforderungen und eine strukturierte Umsetzung sind entscheidend.</p></div>
+        <div class="c-card"><p>Das Designtool (Qt Creator) schränkte den Designprozess ein.</p></div>
+      </div>
+    </section>
+
+    <div class="c-end">
+      <p>Fertig gelesen?</p>
+      <button class="c-btn" type="button" data-close>← Zurück zu allen Projekten</button>
+    </div>
+  </div>
+</template>
 
 <main class="stage">
   <div class="stack" id="stack">
@@ -748,13 +1009,39 @@
       missing.forEach(el => { el.style.opacity = ''; el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 700, easing: 'ease-out' }); });
       try { history.pushState({ p: i }, '', '#' + (slot.getAttribute('href') || '').replace('#', '')); pushed = true; } catch (e) { pushed = false; }
       busy = false;
+      showCase(i);
     }, T_GROW + 40);
   }
+
+
+  /* ---------------- Case-Study-Seite ---------------- */
+  const caseEl = $('case'), caseBody = $('caseBody');
+  function showCase(i) {
+    const key = (slots[i].getAttribute('href') || '').replace('#', '');
+    const tpl = document.getElementById('case-' + key);
+    if (!tpl) return;                                     // Projekte ohne Case Study bleiben beim Hero
+    caseBody.innerHTML = '';
+    caseBody.appendChild(tpl.content.cloneNode(true));
+    caseBody.querySelectorAll('.c-shot .frame').forEach(f => {   // fehlende Bilder -> Platzhalterfläche
+      const img = f.querySelector('img');
+      const miss = () => f.classList.add('missing');
+      img.addEventListener('error', miss);
+      if (img.complete && !img.naturalWidth) miss();
+    });
+    caseEl.style.setProperty('--accent', slots[i].dataset.c || '#2f6fb5');
+    caseEl.scrollTop = 0;
+    $('heroNote').style.display = 'none'; $('heroBack').style.visibility = 'hidden';
+    caseEl.classList.add('on');
+  }
+  function hideCase() { caseEl.classList.remove('on'); caseEl.scrollTop = 0; $('heroNote').style.display = ''; $('heroBack').style.visibility = ''; }
+  $('caseBack').addEventListener('click', () => $('heroBack').click());
+  caseBody.addEventListener('click', e => { if (e.target.closest('[data-close]')) $('heroBack').click(); });
 
   /* ---------------- Zurück ---------------- */
   function closeProject() {
     if (busy || active < 0) return;
     busy = true;
+    hideCase();
     const i = active, slot = slots[i], card = slot.querySelector('.card');
     const ry = cssNum('--ry'), w = parseFloat(getComputedStyle(slot).width);
 
