@@ -569,7 +569,7 @@
     overOpenCard = hovered >= 0 && ((zone && +zone.dataset.i === hovered) || !!onHovCard);
     label.classList.toggle('show', overOpenCard && S[hovered].open >= LABEL_AT);
   });
-  document.documentElement.addEventListener('pointerleave', () => { if (active >= 0) return; overOpenCard = false; leaveAll(); });
+  document.documentElement.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse' || active >= 0) return; overOpenCard = false; leaveAll(); });
 
   /* =====================================================================
      Übergang: Karte -> Vollbild-Hero und zurück
